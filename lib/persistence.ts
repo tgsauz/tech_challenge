@@ -7,6 +7,19 @@ import { prisma } from "./prisma";
 import { getMovieRecommendations } from "./tmdb";
 import { getTrackRecommendations } from "./spotify";
 
+/** Removes duplicate items based on `id` using a Set for O(n) performance */
+function uniqueById<T extends { id: string | number }>(items: T[]): T[] {
+  const seen = new Set<string | number>();
+  const out: T[] = [];
+  for (const item of items) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
 /**
  * Save a watched movie to the user's history.
  * If the movie is already saved, this is a no-op (idempotent).
@@ -17,6 +30,9 @@ export async function saveWatchedMovie(
   movieTitle: string
 ): Promise<void> {
   try {
+    if (!userId || typeof movieId !== "number" || !movieTitle) {
+      throw new Error("Invalid arguments passed to saveWatchedMovie");
+    }
     await prisma.watchedMovie.upsert({
       where: {
         userId_movieId: {
@@ -30,12 +46,14 @@ export async function saveWatchedMovie(
         movieTitle
       },
       update: {
-        // If it exists, just update the timestamp
-        movieTitle
+        // Update title and refresh the addedAt timestamp so recent activity is tracked
+        movieTitle,
+        addedAt: new Date()
       }
     });
   } catch (error) {
-    throw new Error(`Failed to save watched movie: ${error}`);
+    console.error(error);
+    throw new Error(`Failed to save watched movie: ${String(error)}`);
   }
 }
 
@@ -50,6 +68,9 @@ export async function saveListenedSong(
   artist: string
 ): Promise<void> {
   try {
+    if (!userId || !trackId || !trackName) {
+      throw new Error("Invalid arguments passed to saveListenedSong");
+    }
     await prisma.listenedSong.upsert({
       where: {
         userId_trackId: {
@@ -64,13 +85,15 @@ export async function saveListenedSong(
         artist
       },
       update: {
-        // If it exists, just update the timestamp
+        // Update metadata and refresh timestamp
         trackName,
-        artist
+        artist,
+        addedAt: new Date()
       }
     });
   } catch (error) {
-    throw new Error(`Failed to save listened song: ${error}`);
+    console.error(error);
+    throw new Error(`Failed to save listened song: ${String(error)}`);
   }
 }
 
@@ -102,7 +125,7 @@ export async function getUserHistory(userId: string): Promise<{
         where: { userId },
         orderBy: { addedAt: "desc" }
       })
-    ]);
+    ] as const);
 
     return {
       watchedMovies: watchedMovies.map((m) => ({
@@ -120,7 +143,8 @@ export async function getUserHistory(userId: string): Promise<{
       }))
     };
   } catch (error) {
-    throw new Error(`Failed to get user history: ${error}`);
+    console.error(error);
+    throw new Error(`Failed to get user history: ${String(error)}`);
   }
 }
 
@@ -153,30 +177,24 @@ export async function getRecommendationsFromHistory(userId: string): Promise<{
     // Get recommendations for the last 3 watched movies
     const recentMovies = history.watchedMovies.slice(0, 3);
     const movieRecsPromises = recentMovies.map((m) =>
-      getMovieRecommendations(m.movieId).catch(() => [])
+      getMovieRecommendations(m.movieId).catch((err) => {
+        console.error("getMovieRecommendations error:", err);
+        return [] as any[];
+      })
     );
     const movieRecsArrays = await Promise.all(movieRecsPromises);
-    const movieRecommendations = movieRecsArrays
-      .flat()
-      .filter(
-        (movie, index, self) =>
-          index === self.findIndex((m) => m.id === movie.id)
-      )
-      .slice(0, 10); // Limit to 10 unique recommendations
+    const movieRecommendations = uniqueById(movieRecsArrays.flat()).slice(0, 10);
 
     // Get recommendations for the last 3 listened songs
     const recentSongs = history.listenedSongs.slice(0, 3);
     const songRecsPromises = recentSongs.map((s) =>
-      getTrackRecommendations([s.trackId]).catch(() => [])
+      getTrackRecommendations([s.trackId]).catch((err) => {
+        console.error("getTrackRecommendations error:", err);
+        return [] as any[];
+      })
     );
     const songRecsArrays = await Promise.all(songRecsPromises);
-    const songRecommendations = songRecsArrays
-      .flat()
-      .filter(
-        (song, index, self) =>
-          index === self.findIndex((s) => s.id === song.id)
-      )
-      .slice(0, 10); // Limit to 10 unique recommendations
+    const songRecommendations = uniqueById(songRecsArrays.flat()).slice(0, 10);
 
     return {
       movieRecommendations,

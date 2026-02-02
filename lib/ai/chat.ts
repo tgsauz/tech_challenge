@@ -40,18 +40,18 @@ async function getConversationHistory(
   limit: number = 20
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
   const messages = await prisma.message.findMany({
-    where: { conversationId },
+    where: {
+      conversationId,
+      role: { in: ["user", "assistant", "system"] }
+    },
     orderBy: { createdAt: "asc" },
     take: limit
   });
 
-  return messages.map((msg) => ({
-    role: msg.role as
-      | "user"
-      | "assistant"
-      | "system"
-      | "tool",
-    content: msg.content
+  return messages.map(
+    (msg: { role: "user" | "assistant" | "system"; content: string | null }) => ({
+    role: msg.role,
+    content: msg.content ?? ""
   }));
 }
 
@@ -85,6 +85,10 @@ export async function chatWithTools(
       data: { userId }
     });
     convId = conv.id;
+  }
+
+  if (!convId) {
+    throw new Error("Conversation ID was not created")
   }
 
   // Save user message
@@ -131,7 +135,7 @@ export async function chatWithTools(
     // Add assistant message to history
     messages.push({
       role: "assistant",
-      content: choice.message.content || null,
+      content: choice.message.content ?? "",
       tool_calls: choice.message.tool_calls
     });
 
@@ -149,7 +153,7 @@ export async function chatWithTools(
       let args: Record<string, unknown>;
       
       try {
-        args = JSON.parse(toolCall.function.arguments);
+        args = JSON.parse(toolCall.function.arguments ?? "{}");
       } catch {
         debugEvents.push({
           id: `tool-error-${Date.now()}`,
