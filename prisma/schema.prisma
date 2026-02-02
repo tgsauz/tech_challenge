@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages  Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+
+  role     String
+  content  String
+  createdAt DateTime @default(now())
+}
+
+model WatchedMovie {
+  id         String   @id @default(cuid())
+  userId     String
+  movieId    Int
+  movieTitle String
+  addedAt    DateTime @default(now())
+
+  @@unique([userId, movieId])
+}
+
+model ListenedSong {
+  id        String   @id @default(cuid())
+  userId    String
+  trackId   String
+  trackName String
+  artist    String
+  addedAt   DateTime @default(now())
+
+  @@unique([userId, trackId])
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  itemType  String
+  itemId    String
+  rating    Int      // 1 for thumbs up, -1 for thumbs down
+  createdAt DateTime @default(now())
+}
+
