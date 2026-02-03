@@ -48,11 +48,19 @@ async function getConversationHistory(
     take: limit
   });
 
-  return messages.map(
-    (msg: { role: "user" | "assistant" | "system"; content: string | null }) => ({
-    role: msg.role,
-    content: msg.content ?? ""
-  }));
+  const allowedRoles = ["user", "assistant", "system"] as const;
+
+  return messages.map((msg: { role: string; content: string | null }) => {
+    const rawRole = typeof msg.role === "string" ? msg.role : "system";
+    const role = (allowedRoles.includes(rawRole as any)
+      ? (rawRole as typeof allowedRoles[number])
+      : "system");
+
+    return {
+      role,
+      content: msg.content ?? ""
+    };
+  });
 }
 
 /**

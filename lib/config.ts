@@ -2,28 +2,32 @@
  * Central place to read and validate environment variables.
  * This helps avoid subtle bugs due to missing keys.
  */
+function getRequiredEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return v;
+}
+
+// Export validated, typed constants for consumers to use directly.
+export const OPENAI_API_KEY = getRequiredEnv("OPENAI_API_KEY");
+export const TMDB_API_KEY = getRequiredEnv("TMDB_API_KEY");
+export const SPOTIFY_CLIENT_ID = getRequiredEnv("SPOTIFY_CLIENT_ID");
+export const SPOTIFY_CLIENT_SECRET = getRequiredEnv("SPOTIFY_CLIENT_SECRET");
+export const DATABASE_URL = getRequiredEnv("DATABASE_URL");
+
+// Backwards-compatible object for existing imports
 export const config = {
-  openAiApiKey: process.env.OPENAI_API_KEY,
-  tmdbApiKey: process.env.TMDB_API_KEY,
-  spotifyClientId: process.env.SPOTIFY_CLIENT_ID,
-  spotifyClientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-  databaseUrl: process.env.DATABASE_URL
+  openAiApiKey: OPENAI_API_KEY,
+  tmdbApiKey: TMDB_API_KEY,
+  spotifyClientId: SPOTIFY_CLIENT_ID,
+  spotifyClientSecret: SPOTIFY_CLIENT_SECRET,
+  databaseUrl: DATABASE_URL
 };
 
 export function ensureServerEnv() {
-  const missing: string[] = [];
-
-  if (!config.openAiApiKey) missing.push("OPENAI_API_KEY");
-  if (!config.tmdbApiKey) missing.push("TMDB_API_KEY");
-  if (!config.spotifyClientId) missing.push("SPOTIFY_CLIENT_ID");
-  if (!config.spotifyClientSecret) missing.push("SPOTIFY_CLIENT_SECRET");
-  if (!config.databaseUrl) missing.push("DATABASE_URL");
-
-  if (missing.length > 0) {
-    // In production we throw so we fail fast instead of silently misbehaving.
-    throw new Error(
-      `Missing required environment variables: ${missing.join(", ")}`
-    );
-  }
+  // kept for compatibility - constants are validated on import
+  return;
 }
 

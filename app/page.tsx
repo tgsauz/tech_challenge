@@ -52,20 +52,26 @@ export default function HomePage() {
     setIsLoading(true);
 
     try {
+      const payload: Record<string, unknown> = {
+        userId,
+        message: userMessage.content
+      };
+      if (conversationId) payload.conversationId = conversationId;
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          userId,
-          conversationId,
-          message: userMessage.content
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
-        throw new Error("Request failed");
+        const bodyText = await res.text().catch(() => null);
+        console.error("API error", res.status, bodyText);
+        setError(bodyText ?? `Request failed (${res.status})`);
+        setIsLoading(false);
+        return;
       }
 
       const data = await res.json();

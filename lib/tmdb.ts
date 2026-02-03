@@ -16,7 +16,8 @@ const TmdbMovieSchema = z.object({
   release_date: z.string().nullable(),
   overview: z.string().nullable(),
   poster_path: z.string().nullable(),
-  genre_ids: z.array(z.number()).optional()
+  genre_ids: z.array(z.number()).optional(),
+  vote_average: z.number().optional()
 });
 
 const TmdbSearchResponseSchema = z.object({
@@ -203,46 +204,94 @@ export async function getMovieRecommendations(
   if (!config.tmdbApiKey) {
     throw new Error("TMDB_API_KEY is not configured");
   }
-
-  const url = new URL(`${TMDB_BASE_URL}/movie/${movieId}/recommendations`);
-  url.searchParams.set("api_key", config.tmdbApiKey);
-  url.searchParams.set("language", "en-US");
-  url.searchParams.set("page", "1");
+  const apiKey = config.tmdbApiKey as string;
+  // Helper: fetch genre map (id -> name) and cache it
+  let genreMap: Map<number, string> | null = null;
+  async function getGenreMap(): Promise<Map<number, string>> {
+    if (genreMap) return genreMap;
+    const url = new URL(`${TMDB_BASE_URL}/genre/movie/list`);
+    url.searchParams.set("api_key", apiKey);
+    url.searchParams.set("language", "en-US");
+    const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`Failed to fetch genres: ${res.status}`);
+    const json = await res.json();
+    const parsed = z.object({ genres: z.array(TmdbGenreSchema) }).parse(json);
+    genreMap = new Map(parsed.genres.map((g) => [g.id, g.name] as [number, string]));
+    return genreMap;
+  }
 
   try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        Accept: "application/json"
-      }
-    });
+    // Get seed movie details to extract its genres
+    const seedDetails = await getMovieDetails(movieId);
+    const genreLookup = await getGenreMap();
+    const seedGenreIds = Array.from(genreLookup.entries())
+      .filter(([, name]) => seedDetails.genres.includes(name))
+      .map(([id]) => id);
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`Movie with ID ${movieId} not found`);
-      }
-      if (response.status === 401) {
-        throw new Error("TMDB API key is invalid");
-      }
-      if (response.status === 429) {
-        throw new Error("TMDB API rate limit exceeded. Please try again later.");
-      }
-      throw new Error(`TMDB API error: ${response.status} ${response.statusText}`);
+    // Endpoints to call: recommendations and similar
+    const endpoints = [
+      `${TMDB_BASE_URL}/movie/${movieId}/recommendations`,
+      `${TMDB_BASE_URL}/movie/${movieId}/similar`
+    ];
+
+    const responses = await Promise.all(
+      endpoints.map((ep) => {
+        const url = new URL(ep);
+        url.searchParams.set("api_key", apiKey);
+        url.searchParams.set("language", "en-US");
+        url.searchParams.set("page", "1");
+        return fetch(url.toString(), { headers: { Accept: "application/json" } });
+      })
+    );
+
+    const ok = responses.every((r) => r.ok);
+    if (!ok) {
+      const bad = responses.find((r) => !r.ok)!;
+      if (bad.status === 401) throw new Error("TMDB API key is invalid");
+      if (bad.status === 429) throw new Error("TMDB API rate limit exceeded. Please try again later.");
+      throw new Error(`TMDB API error: ${bad.status} ${bad.statusText}`);
     }
 
-    const data = await response.json();
-    const parsed = TmdbSearchResponseSchema.parse(data);
+    const datas = await Promise.all(responses.map((r) => r.json()));
+    const parsedArrays = datas.map((d) => TmdbSearchResponseSchema.parse(d).results);
+    // Flatten and dedupe by id
+    const combined = parsedArrays.flat();
+    const seen = new Set<number>();
+    const unique: (z.infer<typeof TmdbMovieSchema>)[] = [];
+    for (const item of combined) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        unique.push(item);
+      }
+    }
 
-    return parsed.results.slice(0, 10).map((movie) => ({
+    // Filter candidates: require intersection with seed genres and min vote_average
+    const excludedGenres = new Set(["Animation", "Family", "Romance", "Documentary"]);
+    const MIN_VOTE = 6.5;
+
+    const filtered = unique.filter((movie) => {
+      const candidateGenreIds = movie.genre_ids ?? [];
+      const candidateGenres = candidateGenreIds.map((id) => genreLookup.get(id)).filter(Boolean) as string[];
+
+      // Exclude if it matches excluded genres
+      if (candidateGenres.some((g) => excludedGenres.has(g))) return false;
+
+      // Require at least one shared genre with seed
+      if (seedGenreIds.length > 0 && !candidateGenreIds.some((id) => seedGenreIds.includes(id))) return false;
+
+      // Require minimum vote average when available
+      if (typeof movie.vote_average === "number" && movie.vote_average < MIN_VOTE) return false;
+
+      return true;
+    });
+
+    return filtered.slice(0, 10).map((movie) => ({
       id: movie.id,
       title: movie.title,
-      releaseYear: movie.release_date
-        ? parseInt(movie.release_date.split("-")[0], 10)
-      : null,
+      releaseYear: movie.release_date ? parseInt(movie.release_date.split("-")[0], 10) : null,
       overview: movie.overview,
-      posterUrl: movie.poster_path
-        ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
-        : null,
-      genres: []
+      posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
+      genres: (movie.genre_ids ?? []).map((id) => genreLookup.get(id)).filter(Boolean) as string[]
     }));
   } catch (error) {
     if (error instanceof z.ZodError) {

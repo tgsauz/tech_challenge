@@ -11,11 +11,16 @@ const chatRequestSchema = z.object({
 export async function POST(req: Request) {
   try {
     const json = await req.json().catch(() => null);
+    console.debug("/api/chat request body:", json);
     const parseResult = chatRequestSchema.safeParse(json);
 
     if (!parseResult.success) {
+      console.error("/api/chat validation failed:", parseResult.error.format());
       return NextResponse.json(
-        { error: "Invalid request body" },
+        {
+          error: "Invalid request body",
+          details: parseResult.error.format()
+        },
         { status: 400 }
       );
     }
