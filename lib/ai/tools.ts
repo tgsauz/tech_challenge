@@ -426,11 +426,13 @@ export async function executeTool(
       }
       default:
         return {
+          result: null,
           error: `Unknown tool: ${toolName}`
         };
     }
   } catch (error) {
     return {
+      result: null,
       error:
         error instanceof Error
           ? error.message
