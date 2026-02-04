@@ -4,12 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
-    "vercel-build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
-    "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
@@ -19,7 +17,6 @@
     "openai": "^4.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "vercel": "^50.10.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -4,10 +4,114 @@ import { useEffect, useState } from "react";
 
 type Role = "user" | "assistant";
 
+type MovieCard = {
+  id: number | string;
+  title: string;
+  overview?: string | null;
+  releaseYear?: number | null;
+  posterUrl?: string | null;
+  genres?: string[];
+  matchConfidence?: string;
+};
+
+type SongCard = {
+  id: string | number;
+  name: string;
+  artists?: string[];
+  album?: string | null;
+  releaseYear?: number | null;
+  previewUrl?: string | null;
+  source?: string;
+};
+
+function MovieCardGrid({ movies }: { movies?: MovieCard[] }) {
+  if (!movies || movies.length === 0) return null;
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-semibold text-zinc-400">
+        Movie recommendations
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {movies.map((movie) => (
+          <div
+            key={movie.id}
+            className="flex gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2"
+          >
+            {movie.posterUrl && (
+              <img
+                src={movie.posterUrl}
+                alt={movie.title}
+                className="h-20 w-14 flex-shrink-0 rounded object-cover"
+              />
+            )}
+            <div className="space-y-1 text-xs">
+              <div className="font-semibold text-zinc-100">
+                {movie.title}
+                {movie.releaseYear && (
+                  <span className="text-zinc-400"> ({movie.releaseYear})</span>
+                )}
+              </div>
+              {movie.genres && movie.genres.length > 0 && (
+                <p className="text-[11px] text-zinc-400">
+                  {movie.genres.join(", ")}
+                </p>
+              )}
+              {movie.overview && (
+                <p className="line-clamp-2 text-[11px] text-zinc-400">
+                  {movie.overview}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SongCardGrid({ songs }: { songs?: SongCard[] }) {
+  if (!songs || songs.length === 0) return null;
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-semibold text-zinc-400">
+        Song recommendations
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {songs.map((song) => (
+          <div
+            key={song.id}
+            className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-xs"
+          >
+            <div className="font-semibold text-zinc-100">{song.name}</div>
+            {song.artists && song.artists.length > 0 && (
+              <p className="text-[11px] text-zinc-400">
+                {song.artists.join(", ")}
+              </p>
+            )}
+            {song.album && (
+              <p className="text-[11px] text-zinc-500">Album: {song.album}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type AssistantMessagePayload = {
+  message: string;
+  movies?: MovieCard[];
+  songs?: SongCard[];
+};
+
 type ChatMessage = {
   id: string;
   role: Role;
   content: string;
+  movies?: MovieCard[];
+  songs?: SongCard[];
 };
 
 type DebugEvent = {
@@ -38,6 +142,35 @@ export default function HomePage() {
       setUserId(id);
     }
   }, []);
+
+  // Load last conversation history for this user so chat persists across reloads
+  useEffect(() => {
+    if (!userId) return;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/history", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ userId })
+        });
+
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (data.conversationId) {
+          setConversationId(data.conversationId as string);
+        }
+        if (Array.isArray(data.messages)) {
+          setMessages(data.messages as ChatMessage[]);
+        }
+      } catch (err) {
+        console.error("Failed to load history", err);
+      }
+    })();
+  }, [userId]);
 
   async function handleSend() {
     if (!input.trim() || !userId) return;
@@ -85,10 +218,13 @@ export default function HomePage() {
       }
 
       if (data.assistantMessage) {
+        const payload: AssistantMessagePayload = data.assistantMessage;
         const assistantMsg: ChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: data.assistantMessage.message ?? data.assistantMessage
+          content: payload.message ?? "",
+          movies: payload.movies ?? [],
+          songs: payload.songs ?? []
         };
         setMessages((prev) => [...prev, assistantMsg]);
       } else {
@@ -152,14 +288,25 @@ export default function HomePage() {
                     m.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  <div
-                    className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                      m.role === "user"
-                        ? "bg-zinc-100 text-black"
-                        : "bg-zinc-800 text-zinc-50"
-                    }`}
-                  >
-                    {m.content}
+                  <div className="max-w-[80%] space-y-2">
+                    <div
+                      className={`rounded-lg px-3 py-2 text-sm ${
+                        m.role === "user"
+                          ? "bg-zinc-100 text-black"
+                          : "bg-zinc-800 text-zinc-50"
+                      }`}
+                    >
+                      {m.content}
+                    </div>
+
+                    {m.role === "assistant" &&
+                      ((m.movies?.length ?? 0) > 0 ||
+                        (m.songs?.length ?? 0) > 0) && (
+                        <div className="space-y-2">
+                          <MovieCardGrid movies={m.movies} />
+                          <SongCardGrid songs={m.songs} />
+                        </div>
+                      )}
                   </div>
                 </div>
               ))}

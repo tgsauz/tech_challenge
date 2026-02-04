@@ -1,15 +1,6 @@
-export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { chatWithTools } from "@/lib/ai/chat";
-
-type ErrorInfo = {
-  name: string;
-  message: string;
-  stack?: string;
-  cause?: string;
-};
 
 const chatRequestSchema = z.object({
   userId: z.string().min(1),
@@ -17,47 +8,51 @@ const chatRequestSchema = z.object({
   message: z.string().min(1)
 });
 
-function serializeError(error: unknown): ErrorInfo {
-  if (error instanceof Error) {
-    const cause =
-      error.cause instanceof Error
-        ? error.cause.message
-        : typeof error.cause === "string"
-          ? error.cause
-          : undefined;
-    return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      cause
-    };
-  }
-
-  return {
-    name: "UnknownError",
-    message: typeof error === "string" ? error : JSON.stringify(error)
-  };
-}
+// Shape of the assistant payload we want to send to the UI
+const assistantPayloadSchema = z.object({
+  message: z.string(),
+  movies: z
+    .array(
+      z.object({
+        id: z.union([z.number(), z.string()]),
+        title: z.string(),
+        overview: z.string().nullable().optional(),
+        releaseYear: z.number().nullable().optional(),
+        posterUrl: z.string().nullable().optional(),
+        genres: z.array(z.string()).optional(),
+        matchConfidence: z.string().optional()
+      })
+    )
+    .optional()
+    .default([]),
+  songs: z
+    .array(
+      z.object({
+        id: z.union([z.number(), z.string()]),
+        name: z.string(),
+        artists: z.array(z.string()).optional().default([]),
+        album: z.string().nullable().optional(),
+        releaseYear: z.number().nullable().optional(),
+        previewUrl: z.string().nullable().optional(),
+        source: z.string().optional()
+      })
+    )
+    .optional()
+    .default([])
+});
 
 export async function POST(req: Request) {
-  const requestId = crypto.randomUUID();
-  const startTime = Date.now();
   try {
     const json = await req.json().catch(() => null);
-    console.debug("/api/chat request body", { requestId, body: json });
+    console.debug("/api/chat request body:", json);
     const parseResult = chatRequestSchema.safeParse(json);
 
     if (!parseResult.success) {
-      console.error("/api/chat validation failed", {
-        requestId,
-        issues: parseResult.error.issues,
-        formatted: parseResult.error.format()
-      });
+      console.error("/api/chat validation failed:", parseResult.error.format());
       return NextResponse.json(
         {
           error: "Invalid request body",
-          details: parseResult.error.format(),
-          requestId
+          details: parseResult.error.format()
         },
         { status: 400 }
       );
@@ -69,29 +64,27 @@ export async function POST(req: Request) {
     const { assistantMessage, newConversationId, debugEvents } =
       await chatWithTools(userId, conversationId ?? null, message);
 
-    console.info("/api/chat request completed", {
-      requestId,
-      durationMs: Date.now() - startTime,
-      conversationId: newConversationId,
-      userId
-    });
+    // Try to parse the assistant message as our structured JSON format.
+    let payload;
+    try {
+      const parsedJson = JSON.parse(assistantMessage);
+      payload = assistantPayloadSchema.parse(parsedJson);
+    } catch {
+      // Fallback: treat it as plain text
+      payload = {
+        message: assistantMessage,
+        movies: [],
+        songs: []
+      };
+    }
 
     return NextResponse.json({
-      assistantMessage: {
-        message: assistantMessage,
-        type: "info"
-      },
+      assistantMessage: payload,
       conversationId: newConversationId,
-      debugEvents,
-      requestId
+      debugEvents
     });
   } catch (error) {
-    const errorInfo = serializeError(error);
-    console.error("/api/chat error", {
-      requestId,
-      durationMs: Date.now() - startTime,
-      error: errorInfo
-    });
+    console.error("Chat API error:", error);
     return NextResponse.json(
       {
         error:
@@ -107,12 +100,13 @@ export async function POST(req: Request) {
           {
             id: `error-${Date.now()}`,
             type: "error",
-            message: errorInfo.message
+            message:
+              error instanceof Error ? error.message : String(error)
           }
-        ],
-        requestId
+        ]
       },
       { status: 500 }
     );
   }
 }
+
