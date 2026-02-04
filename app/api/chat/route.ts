@@ -4,24 +4,60 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { chatWithTools } from "@/lib/ai/chat";
 
+type ErrorInfo = {
+  name: string;
+  message: string;
+  stack?: string;
+  cause?: string;
+};
+
 const chatRequestSchema = z.object({
   userId: z.string().min(1),
   conversationId: z.string().optional(),
   message: z.string().min(1)
 });
 
+function serializeError(error: unknown): ErrorInfo {
+  if (error instanceof Error) {
+    const cause =
+      error.cause instanceof Error
+        ? error.cause.message
+        : typeof error.cause === "string"
+          ? error.cause
+          : undefined;
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause
+    };
+  }
+
+  return {
+    name: "UnknownError",
+    message: typeof error === "string" ? error : JSON.stringify(error)
+  };
+}
+
 export async function POST(req: Request) {
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
   try {
     const json = await req.json().catch(() => null);
-    console.debug("/api/chat request body:", json);
+    console.debug("/api/chat request body", { requestId, body: json });
     const parseResult = chatRequestSchema.safeParse(json);
 
     if (!parseResult.success) {
-      console.error("/api/chat validation failed:", parseResult.error.format());
+      console.error("/api/chat validation failed", {
+        requestId,
+        issues: parseResult.error.issues,
+        formatted: parseResult.error.format()
+      });
       return NextResponse.json(
         {
           error: "Invalid request body",
-          details: parseResult.error.format()
+          details: parseResult.error.format(),
+          requestId
         },
         { status: 400 }
       );
@@ -33,16 +69,29 @@ export async function POST(req: Request) {
     const { assistantMessage, newConversationId, debugEvents } =
       await chatWithTools(userId, conversationId ?? null, message);
 
+    console.info("/api/chat request completed", {
+      requestId,
+      durationMs: Date.now() - startTime,
+      conversationId: newConversationId,
+      userId
+    });
+
     return NextResponse.json({
       assistantMessage: {
         message: assistantMessage,
         type: "info"
       },
       conversationId: newConversationId,
-      debugEvents
+      debugEvents,
+      requestId
     });
   } catch (error) {
-    console.error("Chat API error:", error);
+    const errorInfo = serializeError(error);
+    console.error("/api/chat error", {
+      requestId,
+      durationMs: Date.now() - startTime,
+      error: errorInfo
+    });
     return NextResponse.json(
       {
         error:
@@ -58,13 +107,12 @@ export async function POST(req: Request) {
           {
             id: `error-${Date.now()}`,
             type: "error",
-            message:
-              error instanceof Error ? error.message : String(error)
+            message: errorInfo.message
           }
-        ]
+        ],
+        requestId
       },
       { status: 500 }
     );
   }
 }
-
