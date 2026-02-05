@@ -16,6 +16,10 @@ export const TMDB_API_KEY = getRequiredEnv("TMDB_API_KEY");
 export const SPOTIFY_CLIENT_ID = getRequiredEnv("SPOTIFY_CLIENT_ID");
 export const SPOTIFY_CLIENT_SECRET = getRequiredEnv("SPOTIFY_CLIENT_SECRET");
 export const DATABASE_URL = getRequiredEnv("DATABASE_URL");
+export const SUPABASE_URL = getRequiredEnv("SUPABASE_URL");
+export const SUPABASE_SERVICE_ROLE_KEY = getRequiredEnv(
+  "SUPABASE_SERVICE_ROLE_KEY"
+);
 
 // Backwards-compatible object for existing imports
 export const config = {
@@ -23,7 +27,9 @@ export const config = {
   tmdbApiKey: TMDB_API_KEY,
   spotifyClientId: SPOTIFY_CLIENT_ID,
   spotifyClientSecret: SPOTIFY_CLIENT_SECRET,
-  databaseUrl: DATABASE_URL
+  databaseUrl: DATABASE_URL,
+  supabaseUrl: SUPABASE_URL,
+  supabaseServiceRoleKey: SUPABASE_SERVICE_ROLE_KEY
 };
 
 export function ensureServerEnv() {

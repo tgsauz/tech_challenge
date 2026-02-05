@@ -1,104 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { MovieCard } from "@/components/MovieCardGrid";
+import { MovieCardGrid } from "@/components/MovieCardGrid";
+import type { SongCard } from "@/components/SongCardGrid";
+import { SongCardGrid } from "@/components/SongCardGrid";
+import { DebugPanel } from "@/components/DebugPanel";
 
 type Role = "user" | "assistant";
-
-type MovieCard = {
-  id: number | string;
-  title: string;
-  overview?: string | null;
-  releaseYear?: number | null;
-  posterUrl?: string | null;
-  genres?: string[];
-  matchConfidence?: string;
-};
-
-type SongCard = {
-  id: string | number;
-  name: string;
-  artists?: string[];
-  album?: string | null;
-  releaseYear?: number | null;
-  previewUrl?: string | null;
-  source?: string;
-};
-
-function MovieCardGrid({ movies }: { movies?: MovieCard[] }) {
-  if (!movies || movies.length === 0) return null;
-
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-semibold text-zinc-400">
-        Movie recommendations
-      </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {movies.map((movie) => (
-          <div
-            key={movie.id}
-            className="flex gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2"
-          >
-            {movie.posterUrl && (
-              <img
-                src={movie.posterUrl}
-                alt={movie.title}
-                className="h-20 w-14 flex-shrink-0 rounded object-cover"
-              />
-            )}
-            <div className="space-y-1 text-xs">
-              <div className="font-semibold text-zinc-100">
-                {movie.title}
-                {movie.releaseYear && (
-                  <span className="text-zinc-400"> ({movie.releaseYear})</span>
-                )}
-              </div>
-              {movie.genres && movie.genres.length > 0 && (
-                <p className="text-[11px] text-zinc-400">
-                  {movie.genres.join(", ")}
-                </p>
-              )}
-              {movie.overview && (
-                <p className="line-clamp-2 text-[11px] text-zinc-400">
-                  {movie.overview}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SongCardGrid({ songs }: { songs?: SongCard[] }) {
-  if (!songs || songs.length === 0) return null;
-
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-semibold text-zinc-400">
-        Song recommendations
-      </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {songs.map((song) => (
-          <div
-            key={song.id}
-            className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-xs"
-          >
-            <div className="font-semibold text-zinc-100">{song.name}</div>
-            {song.artists && song.artists.length > 0 && (
-              <p className="text-[11px] text-zinc-400">
-                {song.artists.join(", ")}
-              </p>
-            )}
-            {song.album && (
-              <p className="text-[11px] text-zinc-500">Album: {song.album}</p>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 type AssistantMessagePayload = {
   message: string;
@@ -129,6 +38,12 @@ export default function HomePage() {
   const [showDebug, setShowDebug] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [movieFeedback, setMovieFeedback] = useState<
+    Record<string, 1 | -1 | null | undefined>
+  >({});
+  const [feedbackStatus, setFeedbackStatus] = useState<
+    Record<string, string | undefined>
+  >({});
 
   // Simple user id persistence in localStorage
   useEffect(() => {
@@ -168,6 +83,30 @@ export default function HomePage() {
         }
       } catch (err) {
         console.error("Failed to load history", err);
+      }
+    })();
+  }, [userId]);
+
+  // Load feedback so toggle states are persistent
+  useEffect(() => {
+    if (!userId) return;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/feedback?userId=${userId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.feedback)) {
+          const next: Record<string, 1 | -1 | null> = {};
+          for (const item of data.feedback) {
+            if (item.itemType === "movie") {
+              next[String(item.itemId)] = item.rating === 1 ? 1 : -1;
+            }
+          }
+          setMovieFeedback(next);
+        }
+      } catch (err) {
+        console.error("Failed to load feedback", err);
       }
     })();
   }, [userId]);
@@ -238,6 +177,40 @@ export default function HomePage() {
     }
   }
 
+  async function handleMovieFeedback(movieId: string | number, rating: 1 | -1) {
+    if (!userId) return;
+    const key = String(movieId);
+
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          itemType: "movie",
+          itemId: movieId,
+          rating
+        })
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
+        setMovieFeedback((prev) => ({
+          ...prev,
+          [key]: data.rating ?? null
+        }));
+        setFeedbackStatus((prev) => ({
+          ...prev,
+          [key]: data.rating ? "Saved" : "Removed"
+        }));
+        window.setTimeout(() => {
+          setFeedbackStatus((prev) => ({ ...prev, [key]: undefined }));
+        }, 1200);
+      }
+    } catch (err) {
+      console.error("Failed to save feedback", err);
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -258,7 +231,7 @@ export default function HomePage() {
           </p>
         </header>
 
-        <div className="flex flex-1 gap-4">
+        <div className="flex flex-1 flex-col gap-4 lg:flex-row">
           <section className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
@@ -303,7 +276,12 @@ export default function HomePage() {
                       ((m.movies?.length ?? 0) > 0 ||
                         (m.songs?.length ?? 0) > 0) && (
                         <div className="space-y-2">
-                          <MovieCardGrid movies={m.movies} />
+                          <MovieCardGrid
+                            movies={m.movies}
+                            onFeedback={handleMovieFeedback}
+                            feedbackById={movieFeedback}
+                            feedbackStatusById={feedbackStatus}
+                          />
                           <SongCardGrid songs={m.songs} />
                         </div>
                       )}
@@ -345,41 +323,9 @@ export default function HomePage() {
             </div>
           </section>
 
-          {showDebug && (
-            <aside className="w-64 rounded-xl border border-zinc-800 bg-black/80 p-3 text-xs">
-              <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                Debug panel
-              </h2>
-              <p className="mb-2 text-[11px] text-zinc-500">
-                Shows which tools the AI used, short descriptions, and any
-                errors. This helps prove the bot is doing real work with TMDB,
-                Spotify, and the database.
-              </p>
-              <div className="space-y-1 overflow-y-auto">
-                {debugEvents.length === 0 && (
-                  <p className="text-zinc-600">No debug events yet.</p>
-                )}
-                {debugEvents.map((e) => (
-                  <div
-                    key={e.id}
-                    className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-zinc-200">
-                        {e.type}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-zinc-400">
-                      {e.message}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </aside>
-          )}
+          {showDebug && <DebugPanel events={debugEvents} />}
         </div>
       </main>
     </div>
   );
 }
-

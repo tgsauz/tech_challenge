@@ -11,6 +11,7 @@ const chatRequestSchema = z.object({
 // Shape of the assistant payload we want to send to the UI
 const assistantPayloadSchema = z.object({
   message: z.string(),
+  reasoning: z.string().optional(),
   movies: z
     .array(
       z.object({

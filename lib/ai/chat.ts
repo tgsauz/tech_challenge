@@ -21,7 +21,17 @@ Important guidelines:
 - When a user mentions they watched/liked a movie, use save_watched_movie to remember it.
 - When a user mentions they listened/liked a song, use save_listened_song to remember it.
 - For recommendations, use get_movie_recommendations or get_track_recommendations based on specific items, or get_recommendations_from_history for personalized suggestions.
+- For thematic \"movies like X\" questions, PREFER get_semantic_movie_recommendations over get_movie_recommendations, because it uses embeddings + Supabase for better similarity.
+- Use get_user_feedback to learn what the user likes/dislikes and refine recommendations. Prioritize items similar to liked entries and down-rank items similar to disliked entries (do not hard-exclude unless the user asks).
 - For cross-references, use find_songs_in_movie or find_movies_with_song.
+
+Reasoning:
+- Before deciding which tools to call, think step by step about the user's intent and which tools are most appropriate.
+- Keep chain-of-thought private; do NOT include step-by-step reasoning. You must include a short "reasoning" field in the JSON (1-2 sentences) that explains at a high level why the results were chosen.
+
+Opinions & explanations:
+- If the user asks for your opinion, provide a short, friendly opinion and explain it using concrete shared traits (themes, tone, genre, or narrative elements).
+- When recommending movies or songs, include a brief explanation in the "message" for why those items fit the request. If possible, mention 2-3 shared traits with the user's reference.
 
 CRITICAL: Final response format
 - Your final answer (after using any tools) MUST be a single JSON object, and nothing else.
@@ -29,6 +39,7 @@ CRITICAL: Final response format
 - The JSON must have this shape (fields may be empty, but must exist):
 {
   "message": "short friendly explanation in plain text",
+  "reasoning": "very short explanation of why these results were chosen",
   "movies": [
     {
       "id": 123,
@@ -54,6 +65,7 @@ CRITICAL: Final response format
 }
 
 - Always include a helpful "message" string summarizing what you did.
+- Include a concise "reasoning" field describing why you chose these movies/songs (one or two sentences, no step-by-step).
 - Use "movies" for any movie recommendations or results (can be empty array).
 - Use "songs" for any song/track recommendations or results (can be empty array).
 - Keep titles and overviews concise so they fit nicely in UI cards.`;
@@ -162,6 +174,13 @@ export async function chatWithTools(
     });
 
     const choice = completion.choices[0];
+    if (completion.usage) {
+      debugEvents.push({
+        id: `tokens-${iteration}`,
+        type: "tokens",
+        message: JSON.stringify(completion.usage)
+      });
+    }
     if (!choice.message) {
       throw new Error("OpenAI returned no message");
     }

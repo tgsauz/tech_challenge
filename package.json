@@ -9,14 +9,19 @@
     "lint": "eslint",
     "test": "vitest",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "vercel-build": "prisma generate && next build",
+    "backfill:embeddings": "node scripts/backfill-embeddings.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@supabase/supabase-js": "^2.95.1",
     "next": "16.1.6",
     "openai": "^4.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "supabase": "^2.75.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {

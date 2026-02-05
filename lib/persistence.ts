@@ -204,3 +204,88 @@ export async function getRecommendationsFromHistory(userId: string): Promise<{
     throw new Error(`Failed to get recommendations from history: ${error}`);
   }
 }
+
+/**
+ * Save user feedback (thumbs up/down) for an item.
+ */
+export async function toggleFeedback(
+  userId: string,
+  itemType: string,
+  itemId: string,
+  rating: 1 | -1
+): Promise<{ rating: 1 | -1 | null }> {
+  try {
+    if (!userId || !itemType || !itemId || (rating !== 1 && rating !== -1)) {
+      throw new Error("Invalid arguments passed to toggleFeedback");
+    }
+
+    const existing = await prisma.feedback.findUnique({
+      where: {
+        userId_itemType_itemId: {
+          userId,
+          itemType,
+          itemId
+        }
+      }
+    });
+
+    if (existing && existing.rating === rating) {
+      await prisma.feedback.delete({
+        where: { id: existing.id }
+      });
+      return { rating: null };
+    }
+
+    if (existing) {
+      const updated = await prisma.feedback.update({
+        where: { id: existing.id },
+        data: { rating }
+      });
+      return { rating: updated.rating as 1 | -1 };
+    }
+
+    const created = await prisma.feedback.create({
+      data: {
+        userId,
+        itemType,
+        itemId,
+        rating
+      }
+    });
+    return { rating: created.rating as 1 | -1 };
+  } catch (error) {
+    console.error(error);
+    throw new Error(`Failed to toggle feedback: ${String(error)}`);
+  }
+}
+
+/**
+ * Get the user's feedback history.
+ */
+export async function getUserFeedback(userId: string): Promise<
+  Array<{
+    id: string;
+    itemType: string;
+    itemId: string;
+    rating: number;
+    createdAt: Date;
+  }>
+> {
+  try {
+    const feedback = await prisma.feedback.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return feedback.map((f) => ({
+      id: f.id,
+      itemType: f.itemType,
+      itemId: f.itemId,
+      rating: f.rating,
+      createdAt: f.createdAt
+    }));
+  } catch (error) {
+    console.error(error);
+    throw new Error(`Failed to get user feedback: ${String(error)}`);
+  }
+}

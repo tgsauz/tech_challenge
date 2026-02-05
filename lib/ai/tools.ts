@@ -21,9 +21,11 @@ import {
   saveWatchedMovie,
   saveListenedSong,
   getUserHistory,
-  getRecommendationsFromHistory
+  getRecommendationsFromHistory,
+  getUserFeedback
 } from "../persistence";
 import { findMoviesWithSong, findSongsInMovie } from "../crossReference";
+import { getSemanticMovieRecommendations } from "../semanticRecommendations";
 
 /**
  * Define all available tools for OpenAI function calling.
@@ -79,6 +81,24 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           movie_id: {
             type: "number",
             description: "TMDB movie ID to get recommendations for"
+          }
+        },
+        required: ["movie_id"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_semantic_movie_recommendations",
+      description:
+        "Get semantically similar movie recommendations based on embeddings + Supabase. Prefer this when the user asks for 'movies like X' or 'similar to X' for better thematic matches.",
+      parameters: {
+        type: "object",
+        properties: {
+          movie_id: {
+            type: "number",
+            description: "TMDB movie ID for the seed movie"
           }
         },
         required: ["movie_id"]
@@ -310,6 +330,24 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         required: ["user_id"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_user_feedback",
+      description:
+        "Get the user's feedback (likes/dislikes) for items. Use this to refine recommendations and avoid items similar to disliked ones while prioritizing liked ones.",
+      parameters: {
+        type: "object",
+        properties: {
+          user_id: {
+            type: "string",
+            description: "User ID"
+          }
+        },
+        required: ["user_id"]
+      }
+    }
   }
 ];
 
@@ -341,6 +379,13 @@ export async function executeTool(
         const schema = z.object({ movie_id: z.number() });
         const { movie_id } = schema.parse(args);
         const results = await getMovieRecommendations(movie_id);
+        return { result: results };
+      }
+      case "get_semantic_movie_recommendations": {
+        const schema = z.object({ movie_id: z.number() });
+        const { movie_id } = schema.parse(args);
+        const seed = await getMovieDetails(movie_id);
+        const results = await getSemanticMovieRecommendations(seed);
         return { result: results };
       }
       case "get_movie_soundtrack": {
@@ -422,6 +467,12 @@ export async function executeTool(
         const schema = z.object({ user_id: z.string() });
         const { user_id } = schema.parse(args);
         const result = await getRecommendationsFromHistory(user_id);
+        return { result };
+      }
+      case "get_user_feedback": {
+        const schema = z.object({ user_id: z.string() });
+        const { user_id } = schema.parse(args);
+        const result = await getUserFeedback(user_id);
         return { result };
       }
       default:

@@ -1,6 +1,6 @@
 # Gleni Movie & Music Discovery Chatbot
 
-A production-ready web chat application that helps users discover movies and music through natural conversation. The bot integrates with **TMDB** (The Movie Database) and **Spotify** APIs, uses **OpenAI** for intelligent reasoning and tool selection, and stores user preferences in a **SQLite** database.
+A production-ready web chat application that helps users discover movies and music through natural conversation. The bot integrates with **TMDB** (The Movie Database) and **Spotify** APIs, uses **OpenAI** for intelligent reasoning and tool selection, and stores user preferences in a **Supabase Postgres** database.
 
 ## 🎯 Problem It Solves
 
@@ -21,7 +21,7 @@ Natural conversation interface for personalized content discovery, combining mov
 - **Music Discovery**: Search tracks, get details, and recommendations via Spotify API
 - **Cross-Referencing**: Find songs in movies and movies featuring specific songs
 - **Personalized Recommendations**: Based on user's watched movies and listened songs
-- **Persistent History**: SQLite database stores conversations and user preferences
+- **Persistent History**: Supabase Postgres stores conversations and user preferences
 - **Debug Panel**: See which tools the AI called and how it reasoned (bonus feature)
 - **Feedback System**: Thumbs up/down on recommendations (bonus feature)
 
@@ -58,7 +58,7 @@ Natural conversation interface for personalized content discovery, combining mov
 
 - **Frontend + Backend**: Next.js 16 (App Router) + React 19 + TypeScript
 - **Styling**: Tailwind CSS 4
-- **Database**: SQLite via Prisma ORM
+- **Database**: Supabase Postgres via Prisma ORM
 - **AI**: OpenAI API (GPT-4o-mini) with function calling
 - **External APIs**:
   - TMDB API v3 (The Movie Database)
@@ -130,7 +130,8 @@ OPENAI_API_KEY=your-openai-key-here
 TMDB_API_KEY=your-tmdb-key-here
 SPOTIFY_CLIENT_ID=your-spotify-client-id
 SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="your-database-pooler-url"
+DIRECT_URL="your-direct-database-url"
 ```
 
 4. **Set up the database**
@@ -142,7 +143,7 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
-This creates the SQLite database file at `prisma/dev.db`.
+This creates the database tables in your Supabase Postgres instance.
 
 5. **Run the development server**
 
@@ -276,11 +277,12 @@ git push origin main
   - `TMDB_API_KEY`
   - `SPOTIFY_CLIENT_ID`
   - `SPOTIFY_CLIENT_SECRET`
-  - `DATABASE_URL` (use Vercel's Postgres or keep SQLite for small scale)
+  - `DATABASE_URL` (use your Supabase pooled connection string)
+  - `DIRECT_URL` (use your Supabase direct connection string for migrations)
 
 3. **Run migrations on Vercel**
 
-After deployment, you may need to run Prisma migrations. You can do this via Vercel's CLI or add a build script.
+After deployment, Prisma migrations run automatically via the `vercel-build` script
 
 ## 🎁 Bonus Features Implemented
 
