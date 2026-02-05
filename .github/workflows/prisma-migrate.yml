@@ -1,3 +1,4 @@
+
 name: Prisma Migrate Deploy
 
 on:
@@ -20,32 +21,40 @@ jobs:
 
       - name: Install dependencies
         run: npm install
-        
-      - name: Check DB port reachability
+
+      - name: Build IPv4 direct url
+        shell: bash
         run: |
-          echo "Host: $DB_HOST"
-          timeout 5 bash -c 'cat < /dev/null > /dev/tcp/'"$DB_HOST"'/5432' && echo "5432 reachable" || echo "5432 NOT reachable"
-        env:
-          DB_HOST: db.zlirkuelucpqqkxbcmup.supabase.co
-          
+          set -euo pipefail
+          DIRECT_URL="${{ secrets.DIRECT_URL }}"
+          if [[ "$DIRECT_URL" != *sslmode=* ]]; then
+            if [[ "$DIRECT_URL" == *\?* ]]; then
+              DIRECT_URL="${DIRECT_URL}&sslmode=require"
+            else
+              DIRECT_URL="${DIRECT_URL}?sslmode=require"
+            fi
+          fi
+          HOST="$(echo "$DIRECT_URL" | sed -E 's|^postgresql://[^@]+@([^:/?]+).*|\1|')"
+          IPV4="$(getent ahostsv4 "$HOST" | awk '{print $1; exit}')"
+          if [[ -z "$IPV4" ]]; then
+            echo "No IPv4 address found for $HOST"
+            exit 1
+          fi
+          DIRECT_URL_IPV4="$(echo "$DIRECT_URL" | sed -E "s|$HOST|$IPV4|")"
+          echo "DIRECT_URL_IPV4=$DIRECT_URL_IPV4" >> "$GITHUB_ENV"
+
       - name: Prisma migrate status
         run: npx prisma migrate status --schema=prisma/schema.prisma
         env:
-          DATABASE_URL: ${{ secrets.DIRECT_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ env.DIRECT_URL_IPV4 }}
+          DIRECT_URL: ${{ env.DIRECT_URL_IPV4 }}
           DEBUG: "prisma:*"
           PRISMA_MIGRATION_ENGINE_LOG: "info"
 
       - name: Run Prisma migrations
         run: npx prisma migrate deploy --schema=prisma/schema.prisma
         env:
-          DATABASE_URL: ${{ secrets.POOLER_URL }}
-          DIRECT_URL: ${{ secrets.POOLER_URL }}
+          DATABASE_URL: ${{ env.DIRECT_URL_IPV4 }}
+          DIRECT_URL: ${{ env.DIRECT_URL_IPV4 }}
           DEBUG: "prisma:*"
           PRISMA_MIGRATION_ENGINE_LOG: "info"
-
-      - name: Run Prisma migrations
-        run: npx prisma migrate deploy --schema=prisma/schema.prisma
-        env:
-          DATABASE_URL: ${{ secrets.POOLER_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
