@@ -24,7 +24,7 @@ import type { MovieDetails, MovieSummary } from "./tmdb";
 
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
-  timeout: 8000
+  timeout: 20000
 });
 
 export type SemanticMovieRecommendation = MovieSummary & {

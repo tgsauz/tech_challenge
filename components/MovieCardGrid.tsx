@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 export type MovieCard = {
   id: number | string;
   title: string;
@@ -22,6 +26,11 @@ export function MovieCardGrid({
   feedbackStatusById?: Record<string, string | undefined>;
 }) {
   if (!movies || movies.length === 0) return null;
+  const [expandedId, setExpandedId] = useState<string | number | null>(null);
+
+  function toggleExpanded(movieId: string | number) {
+    setExpandedId((prev) => (prev === movieId ? null : movieId));
+  }
 
   return (
     <div className="space-y-1">
@@ -29,10 +38,22 @@ export function MovieCardGrid({
         Movie recommendations
       </p>
       <div className="card-grid">
-        {movies.map((movie) => (
+        {movies.map((movie, index) => (
           <div
-            key={movie.id}
-            className="card flex gap-2 p-2"
+            key={`${movie.id}-${index}`}
+            className={`card flex cursor-pointer gap-2 p-2 ${
+              expandedId === movie.id ? "card--expanded" : ""
+            }`}
+            role="button"
+            tabIndex={0}
+            aria-expanded={expandedId === movie.id}
+            onClick={() => toggleExpanded(movie.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleExpanded(movie.id);
+              }
+            }}
           >
             {movie.posterUrl && (
               <img
@@ -54,7 +75,11 @@ export function MovieCardGrid({
                 </p>
               )}
               {movie.overview && (
-                <p className="line-clamp-2 text-[11px] text-zinc-400">
+                <p
+                  className={`card-overview text-[11px] text-zinc-400 ${
+                    expandedId === movie.id ? "" : "line-clamp-2"
+                  }`}
+                >
                   {movie.overview}
                 </p>
               )}
@@ -67,7 +92,11 @@ export function MovieCardGrid({
                         ? "is-active"
                         : ""
                     }`}
-                    onClick={() => onFeedback(movie.id, 1)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onFeedback(movie.id, 1);
+                    }}
+                    onKeyDown={(event) => event.stopPropagation()}
                     aria-label={`Like ${movie.title}`}
                   >
                     Thumbs up
@@ -79,7 +108,11 @@ export function MovieCardGrid({
                         ? "is-active"
                         : ""
                     }`}
-                    onClick={() => onFeedback(movie.id, -1)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onFeedback(movie.id, -1);
+                    }}
+                    onKeyDown={(event) => event.stopPropagation()}
                     aria-label={`Dislike ${movie.title}`}
                   >
                     Thumbs down

@@ -126,7 +126,7 @@ export async function chatWithTools(
 
   const openai = new OpenAI({
     apiKey: config.openAiApiKey,
-    timeout: 8000
+    timeout: 20000
   });
 
   // Get or create conversation
@@ -181,7 +181,7 @@ export async function chatWithTools(
     const choice = completion.choices[0];
     if (completion.usage) {
       debugEvents.push({
-        id: `tokens-${iteration}`,
+        id: `tokens-${iteration}-${crypto.randomUUID()}`,
         type: "tokens",
         message: JSON.stringify(completion.usage)
       });
@@ -214,7 +214,7 @@ export async function chatWithTools(
         args = JSON.parse(toolCall.function.arguments ?? "{}");
       } catch {
         debugEvents.push({
-          id: `tool-error-${Date.now()}`,
+          id: `tool-error-${crypto.randomUUID()}`,
           type: "tool_error",
           message: `Failed to parse arguments for ${toolName}`
         });
@@ -240,7 +240,7 @@ export async function chatWithTools(
 
       if (error) {
         debugEvents.push({
-          id: `tool-error-${toolCall.id}`,
+          id: `tool-error-${toolCall.id}-${crypto.randomUUID()}`,
           type: "tool_error",
           message: `${toolName} failed: ${error}`
         });

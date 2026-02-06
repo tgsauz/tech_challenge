@@ -214,8 +214,17 @@ export async function executeTool(
         const schema = z.object({ movie_id: z.number() });
         const { movie_id } = schema.parse(args);
         const seed = await getMovieDetails(movie_id);
-        const results = await getSemanticMovieRecommendations(seed);
-        return { result: results };
+        try {
+          const results = await getSemanticMovieRecommendations(seed);
+          return { result: results };
+        } catch (error) {
+          console.warn(
+            "Semantic recommendations failed, falling back to TMDB:",
+            error
+          );
+          const fallback = await getMovieRecommendations(movie_id);
+          return { result: fallback };
+        }
       }
       // Cross-reference tools
       // Persistence tools
