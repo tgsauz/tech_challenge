@@ -200,7 +200,8 @@ export async function getMovieDetails(movieId: number): Promise<MovieDetails> {
  * Returns similar movies that users might enjoy.
  */
 export async function getMovieRecommendations(
-  movieId: number
+  movieId: number,
+  options?: { excludeGenres?: string[]; minYear?: number; maxYear?: number }
 ): Promise<MovieSummary[]> {
   if (!config.tmdbApiKey) {
     throw new Error("TMDB_API_KEY is not configured");
@@ -271,21 +272,43 @@ export async function getMovieRecommendations(
     }
 
     // Filter candidates: require intersection with seed genres and min vote_average
-    const excludedGenres = new Set(["Animation", "Family", "Romance", "Documentary"]);
+    const excludedGenresInput = (options?.excludeGenres ?? []).map((g) =>
+      g.trim().toLowerCase()
+    );
+    const excludedGenres =
+      excludedGenresInput.length > 0 ? new Set(excludedGenresInput) : null;
     const MIN_VOTE = 6.5;
+    const minYear = typeof options?.minYear === "number" ? options.minYear : null;
+    const maxYear = typeof options?.maxYear === "number" ? options.maxYear : null;
 
     const filtered = unique.filter((movie) => {
       const candidateGenreIds = movie.genre_ids ?? [];
       const candidateGenres = candidateGenreIds.map((id) => genreLookup.get(id)).filter(Boolean) as string[];
 
-      // Exclude if it matches excluded genres
-      if (candidateGenres.some((g) => excludedGenres.has(g))) return false;
+      // Exclude if it matches explicitly excluded genres
+      if (
+        excludedGenres &&
+        candidateGenres.some((g) => excludedGenres.has(g.toLowerCase()))
+      ) {
+        return false;
+      }
 
       // Require at least one shared genre with seed
       if (seedGenreIds.length > 0 && !candidateGenreIds.some((id) => seedGenreIds.includes(id))) return false;
 
       // Require minimum vote average when available
       if (typeof movie.vote_average === "number" && movie.vote_average < MIN_VOTE) return false;
+
+      if (minYear || maxYear) {
+        const year = movie.release_date
+          ? parseInt(movie.release_date.split("-")[0], 10)
+          : null;
+        if (typeof minYear === "number" && year !== null && year < minYear)
+          return false;
+        if (typeof maxYear === "number" && year !== null && year > maxYear)
+          return false;
+        if (year === null) return false;
+      }
 
       return true;
     });

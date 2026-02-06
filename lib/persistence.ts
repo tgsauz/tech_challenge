@@ -91,7 +91,10 @@ export async function getUserHistory(userId: string): Promise<{
  * Generate recommendations based on the user's saved history.
  * Returns movie recommendations based on watched content.
  */
-export async function getRecommendationsFromHistory(userId: string): Promise<{
+export async function getRecommendationsFromHistory(
+  userId: string,
+  options?: { excludeGenres?: string[]; minYear?: number; maxYear?: number }
+): Promise<{
   movieRecommendations: Array<{
     id: number;
     title: string;
@@ -107,7 +110,11 @@ export async function getRecommendationsFromHistory(userId: string): Promise<{
     // Get recommendations for the last 3 watched movies
     const recentMovies = history.watchedMovies.slice(0, 3);
     const movieRecsPromises = recentMovies.map((m) =>
-      getMovieRecommendations(m.movieId).catch((err) => {
+      getMovieRecommendations(m.movieId, {
+        excludeGenres: options?.excludeGenres,
+        minYear: options?.minYear,
+        maxYear: options?.maxYear
+      }).catch((err) => {
         console.error("getMovieRecommendations error:", err);
         return [] as any[];
       })

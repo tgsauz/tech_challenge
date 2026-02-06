@@ -7,6 +7,291 @@ import OpenAI from "openai";
 import { config, ensureServerEnv } from "../config";
 import { prisma } from "../prisma";
 import { tools, executeTool } from "./tools";
+import { searchMovies, getMovieDetails, getMovieRecommendations } from "../tmdb";
+import { getSemanticMovieRecommendations } from "../semanticRecommendations";
+import { getRecommendationsFromHistory } from "../persistence";
+
+const GENRE_ALIASES: Record<string, string[]> = {
+  "Action": ["action"],
+  "Adventure": ["adventure"],
+  "Animation": ["animation", "animated"],
+  "Comedy": ["comedy", "comedies", "funny"],
+  "Crime": ["crime", "criminal"],
+  "Documentary": ["documentary", "documentaries", "doc"],
+  "Drama": ["drama", "dramatic"],
+  "Family": ["family", "kids", "kid", "children"],
+  "Fantasy": ["fantasy", "fantastical"],
+  "History": ["history", "historical"],
+  "Horror": ["horror", "scary", "frightening"],
+  "Music": ["music", "musical"],
+  "Mystery": ["mystery"],
+  "Romance": ["romance", "romantic", "love story"],
+  "Science Fiction": [
+    "science fiction",
+    "sci fi",
+    "sci-fi",
+    "scifi"
+  ],
+  "TV Movie": ["tv movie", "television movie", "tv-movie"],
+  "Thriller": ["thriller", "thrillers"],
+  "War": ["war", "warfare"],
+  "Western": ["western", "west"]
+};
+
+const AVOID_CUES = ["avoid", "no", "not", "without", "exclude", "skip"];
+const RECENT_CUES = ["recent", "newer", "latest", "modern", "not so old"];
+const RECOMMENDATION_CUES = [
+  "recommend",
+  "recommendation",
+  "movies like",
+  "similar to",
+  "suggest"
+];
+const FRANCHISE_CUES = ["saga", "series", "franchise"];
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractExcludedGenres(message: string): string[] {
+  const lower = message.toLowerCase();
+  const hasCue = AVOID_CUES.some((cue) =>
+    new RegExp(`\\b${escapeRegExp(cue)}\\b`, "i").test(lower)
+  );
+  if (!hasCue) return [];
+
+  const excluded: string[] = [];
+  for (const [genre, aliases] of Object.entries(GENRE_ALIASES)) {
+    for (const alias of aliases) {
+      const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b`, "i");
+      if (pattern.test(lower)) {
+        excluded.push(genre);
+        break;
+      }
+    }
+  }
+
+  return Array.from(new Set(excluded));
+}
+
+function extractYearConstraints(message: string): {
+  minYear?: number;
+  maxYear?: number;
+  notAsOldAsTitle?: string;
+} {
+  const lower = message.toLowerCase();
+  const currentYear = new Date().getFullYear();
+  const matchAfter = lower.match(/\b(after|since)\s+(19|20)\d{2}\b/);
+  if (matchAfter) {
+    const year = parseInt(matchAfter[0].slice(-4), 10);
+    return { minYear: year };
+  }
+  const matchAtLeast = lower.match(/\bat least (?:from|since)?\s*(19|20)\d{2}\b/);
+  if (matchAtLeast) {
+    const year = parseInt(matchAtLeast[0].slice(-4), 10);
+    return { minYear: year };
+  }
+  const matchBefore = lower.match(/\b(before|older than)\s+(19|20)\d{2}\b/);
+  if (matchBefore) {
+    const year = parseInt(matchBefore[0].slice(-4), 10);
+    return { maxYear: year };
+  }
+  const matchLastYears = lower.match(/\blast\s+(\d{1,2})\s+years?\b/);
+  if (matchLastYears) {
+    const years = parseInt(matchLastYears[1], 10);
+    if (!Number.isNaN(years)) {
+      return { minYear: currentYear - years };
+    }
+  }
+  const hasRecentCue = RECENT_CUES.some((cue) =>
+    new RegExp(`\\b${escapeRegExp(cue)}\\b`, "i").test(lower)
+  );
+  if (hasRecentCue) {
+    return { minYear: currentYear - 15 };
+  }
+  const notAsOldAs = message.match(/not as old as\s+([^\n.,;!?]+)/i);
+  if (notAsOldAs && notAsOldAs[1]) {
+    const raw = notAsOldAs[1];
+    const cleaned = raw.split(/but|and|without|avoid/i)[0]?.trim();
+    if (cleaned) return { notAsOldAsTitle: cleaned };
+  }
+  return {};
+}
+
+function isRecommendationIntent(message: string): boolean {
+  const lower = message.toLowerCase();
+  return RECOMMENDATION_CUES.some((cue) => lower.includes(cue));
+}
+
+function extractSeedTitle(message: string): string | null {
+  const quoted = message.match(/["“”']([^"“”']+)["“”']/);
+  if (quoted && quoted[1]) return quoted[1].trim();
+
+  const likeMatch = message.match(/(?:like|similar to)\s+([^\n.,;!?]+)/i);
+  if (likeMatch && likeMatch[1]) {
+    const raw = likeMatch[1];
+    const cleaned = raw.split(/but|and|without|avoid/i)[0]?.trim();
+    if (cleaned) return cleaned;
+  }
+
+  return null;
+}
+
+function extractExcludedTitles(message: string): string[] {
+  const lower = message.toLowerCase();
+  const hasCue = AVOID_CUES.some((cue) =>
+    new RegExp(`\\b${escapeRegExp(cue)}\\b`, "i").test(lower)
+  );
+  if (!hasCue) return [];
+
+  const excluded: string[] = [];
+
+  const quoted = [...message.matchAll(/["“”']([^"“”']+)["“”']/g)];
+  for (const match of quoted) {
+    if (!match[1]) continue;
+    const before = message.slice(0, match.index ?? 0).toLowerCase();
+    if (AVOID_CUES.some((cue) => before.includes(cue))) {
+      excluded.push(match[1].trim());
+    }
+  }
+
+  const franchiseMatch = message.match(
+    /avoid(?: any| the)?(?: movies)?(?: from)?(?: the)?\s+(.+?)\s+(saga|series|franchise)/i
+  );
+  if (franchiseMatch && franchiseMatch[1]) {
+    excluded.push(franchiseMatch[1].trim());
+  }
+
+  if (lower.includes("star trek") && hasCue) {
+    excluded.push("Star Trek");
+  }
+
+  return Array.from(new Set(excluded));
+}
+
+function contentToString(
+  content: OpenAI.Chat.Completions.ChatCompletionMessageParam["content"]
+): string {
+  return typeof content === "string" ? content : "";
+}
+
+function filterExcludedTitles<T extends { title: string }>(
+  items: T[],
+  excludedTitles: string[]
+): T[] {
+  if (!excludedTitles.length) return items;
+  return items.filter((item) => {
+    const title = item.title.toLowerCase();
+    return excludedTitles.every((ex) => !title.includes(ex.toLowerCase()));
+  });
+}
+
+async function buildRecommendationResponse(
+  userMessage: string,
+  history: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  userId: string
+): Promise<string | null> {
+  const excludedGenres = extractExcludedGenres(userMessage);
+  const excludedTitles = extractExcludedTitles(userMessage);
+  const yearConstraints = extractYearConstraints(userMessage);
+
+  const seedFromMessage = extractSeedTitle(userMessage);
+  const lastUserMessage = [...history]
+    .reverse()
+    .find((m) => m.role === "user" && m.content);
+  const seedFromHistory = seedFromMessage
+    ? null
+    : lastUserMessage
+      ? extractSeedTitle(contentToString(lastUserMessage.content))
+      : null;
+  const seedTitle = seedFromMessage ?? seedFromHistory;
+
+  let minYear = yearConstraints.minYear;
+  let maxYear = yearConstraints.maxYear;
+
+  if (yearConstraints.notAsOldAsTitle) {
+    const search = await searchMovies(yearConstraints.notAsOldAsTitle);
+    const seed = search[0];
+    if (seed?.releaseYear) {
+      minYear = seed.releaseYear + 1;
+    }
+  }
+
+  let movies: Array<{
+    id: number | string;
+    title: string;
+    overview: string | null;
+    releaseYear: number | null;
+    posterUrl: string | null;
+    genres: string[];
+    matchConfidence?: "high" | "medium" | "low";
+  }> = [];
+
+  if (seedTitle) {
+    const search = await searchMovies(seedTitle);
+    const seed = search[0];
+    if (seed) {
+      const seedDetails = await getMovieDetails(seed.id);
+      const semantic = await getSemanticMovieRecommendations(seedDetails, {
+        excludeGenres: excludedGenres,
+        minYear,
+        maxYear
+      });
+      const requiresSciFi = seedDetails.genres.includes("Science Fiction");
+      const semanticFiltered = requiresSciFi
+        ? semantic.filter((m) => m.genres.includes("Science Fiction"))
+        : semantic;
+      const semanticNoTitles = filterExcludedTitles(
+        semanticFiltered,
+        excludedTitles
+      );
+      if (semanticNoTitles.length > 0) {
+        movies = semanticNoTitles;
+      } else {
+        const tmdb = await getMovieRecommendations(seed.id, {
+          excludeGenres: excludedGenres,
+          minYear,
+          maxYear
+        });
+        const tmdbNoTitles = filterExcludedTitles(tmdb, excludedTitles);
+        movies = requiresSciFi
+          ? tmdbNoTitles.filter((m) => m.genres.includes("Science Fiction"))
+          : tmdbNoTitles;
+      }
+    }
+  }
+
+  if (movies.length === 0) {
+    const historyRecs = await getRecommendationsFromHistory(userId, {
+      excludeGenres: excludedGenres,
+      minYear,
+      maxYear
+    });
+    movies = filterExcludedTitles(
+      historyRecs.movieRecommendations,
+      excludedTitles
+    );
+  }
+
+  if (movies.length === 0) return null;
+
+  const excludedNote =
+    excludedGenres.length > 0
+      ? ` Excluding: ${excludedGenres.join(", ")}.`
+      : "";
+  const yearNote =
+    typeof minYear === "number"
+      ? ` From ${minYear} onward.`
+      : "";
+
+  return JSON.stringify({
+    message: seedTitle
+      ? `Here are recommendations similar to ${seedTitle}.${excludedNote}${yearNote}`
+      : `Here are recommendations based on your history.${excludedNote}${yearNote}`,
+    reasoning: "Matched themes and applied your constraints.",
+    movies
+  });
+}
 
 /**
  * Few-shot examples (concise, format-focused)
@@ -162,6 +447,29 @@ export async function chatWithTools(
   ];
 
   const debugEvents: Array<{ id: string; type: string; message: string }> = [];
+  const wantsRecommendations = isRecommendationIntent(userMessage);
+
+  if (wantsRecommendations) {
+    const override = await buildRecommendationResponse(
+      userMessage,
+      history,
+      userId
+    );
+    if (override) {
+      await prisma.message.create({
+        data: {
+          conversationId: convId,
+          role: "assistant",
+          content: override
+        }
+      });
+      return {
+        assistantMessage: override,
+        newConversationId: convId,
+        debugEvents
+      };
+    }
+  }
 
   // Tool calling loop (max 5 iterations to avoid infinite loops)
   let finalResponse = "";
@@ -271,6 +579,7 @@ export async function chatWithTools(
     finalResponse =
       "I apologize, but I reached the maximum number of tool calls. Please try rephrasing your question.";
   }
+
 
   // Save assistant message
   await prisma.message.create({

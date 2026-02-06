@@ -32,7 +32,8 @@ export type SemanticMovieRecommendation = MovieSummary & {
 };
 
 export async function getSemanticMovieRecommendations(
-  seed: MovieDetails
+  seed: MovieDetails,
+  options?: { excludeGenres?: string[]; minYear?: number; maxYear?: number }
 ): Promise<SemanticMovieRecommendation[]> {
   // Build a compact description for embedding
   const description = [
@@ -71,7 +72,13 @@ export async function getSemanticMovieRecommendations(
   }
 
   // 3) Map Supabase rows into our MovieSummary shape
-  return (data as any[]).map((row) => {
+  const excludedGenresInput = (options?.excludeGenres ?? []).map((g) =>
+    g.trim().toLowerCase()
+  );
+  const excludedGenres =
+    excludedGenresInput.length > 0 ? new Set(excludedGenresInput) : null;
+
+  const mapped = (data as any[]).map((row) => {
     const similarity: number | undefined = row.similarity ?? row.score;
     let matchConfidence: "high" | "medium" | "low" | undefined;
     if (typeof similarity === "number") {
@@ -89,5 +96,23 @@ export async function getSemanticMovieRecommendations(
       genres: Array.isArray(row.genres) ? row.genres : [],
       matchConfidence
     } satisfies SemanticMovieRecommendation;
+  });
+
+  const filteredByGenre = !excludedGenres
+    ? mapped
+    : mapped.filter((movie) =>
+        movie.genres.every((g) => !excludedGenres.has(g.toLowerCase()))
+      );
+
+  const minYear = typeof options?.minYear === "number" ? options.minYear : null;
+  const maxYear = typeof options?.maxYear === "number" ? options.maxYear : null;
+  if (!minYear && !maxYear) return filteredByGenre;
+
+  return filteredByGenre.filter((movie) => {
+    const year = movie.releaseYear ?? null;
+    if (year === null) return false;
+    if (minYear && year < minYear) return false;
+    if (maxYear && year > maxYear) return false;
+    return true;
   });
 }

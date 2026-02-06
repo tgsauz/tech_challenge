@@ -72,6 +72,22 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           movie_id: {
             type: "number",
             description: "TMDB movie ID to get recommendations for"
+          },
+          exclude_genres: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Optional list of genres to exclude (only use when the user explicitly asks to avoid them)"
+          },
+          min_year: {
+            type: "number",
+            description:
+              "Optional minimum release year to include (only use when the user asks for recent/newer films)"
+          },
+          max_year: {
+            type: "number",
+            description:
+              "Optional maximum release year to include (only use when the user asks for older films)"
           }
         },
         required: ["movie_id"]
@@ -90,6 +106,22 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           movie_id: {
             type: "number",
             description: "TMDB movie ID for the seed movie"
+          },
+          exclude_genres: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Optional list of genres to exclude (only use when the user explicitly asks to avoid them)"
+          },
+          min_year: {
+            type: "number",
+            description:
+              "Optional minimum release year to include (only use when the user asks for recent/newer films)"
+          },
+          max_year: {
+            type: "number",
+            description:
+              "Optional maximum release year to include (only use when the user asks for older films)"
           }
         },
         required: ["movie_id"]
@@ -136,6 +168,22 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           user_id: {
             type: "string",
             description: "User ID"
+          },
+          exclude_genres: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Optional list of genres to exclude (only use when the user explicitly asks to avoid them)"
+          },
+          min_year: {
+            type: "number",
+            description:
+              "Optional minimum release year to include (only use when the user asks for recent/newer films)"
+          },
+          max_year: {
+            type: "number",
+            description:
+              "Optional maximum release year to include (only use when the user asks for older films)"
           }
         },
         required: ["user_id"]
@@ -205,19 +253,41 @@ export async function executeTool(
         return { result };
       }
       case "get_movie_recommendations": {
-        const schema = z.object({ movie_id: z.number() });
-        const { movie_id } = schema.parse(args);
-        const results = await getMovieRecommendations(movie_id);
+        const schema = z.object({
+          movie_id: z.number(),
+          exclude_genres: z.array(z.string()).optional(),
+          min_year: z.number().optional(),
+          max_year: z.number().optional()
+        });
+        const { movie_id, exclude_genres, min_year, max_year } = schema.parse(args);
+        const results = await getMovieRecommendations(movie_id, {
+          excludeGenres: exclude_genres,
+          minYear: min_year,
+          maxYear: max_year
+        });
         return { result: results };
       }
       case "get_semantic_movie_recommendations": {
-        const schema = z.object({ movie_id: z.number() });
-        const { movie_id } = schema.parse(args);
+        const schema = z.object({
+          movie_id: z.number(),
+          exclude_genres: z.array(z.string()).optional(),
+          min_year: z.number().optional(),
+          max_year: z.number().optional()
+        });
+        const { movie_id, exclude_genres, min_year, max_year } = schema.parse(args);
         const seed = await getMovieDetails(movie_id);
         try {
-          const results = await getSemanticMovieRecommendations(seed);
+          const results = await getSemanticMovieRecommendations(seed, {
+            excludeGenres: exclude_genres,
+            minYear: min_year,
+            maxYear: max_year
+          });
           if (!results || results.length === 0) {
-            const fallback = await getMovieRecommendations(movie_id);
+            const fallback = await getMovieRecommendations(movie_id, {
+              excludeGenres: exclude_genres,
+              minYear: min_year,
+              maxYear: max_year
+            });
             return { result: fallback };
           }
           return { result: results };
@@ -226,7 +296,11 @@ export async function executeTool(
             "Semantic recommendations failed, falling back to TMDB:",
             error
           );
-          const fallback = await getMovieRecommendations(movie_id);
+          const fallback = await getMovieRecommendations(movie_id, {
+            excludeGenres: exclude_genres,
+            minYear: min_year,
+            maxYear: max_year
+          });
           return { result: fallback };
         }
       }
@@ -249,9 +323,19 @@ export async function executeTool(
         return { result };
       }
       case "get_recommendations_from_history": {
-        const schema = z.object({ user_id: z.string() });
-        const { user_id } = schema.parse(args);
-        const result = await getRecommendationsFromHistory(user_id);
+        const schema = z.object({
+          user_id: z.string(),
+          exclude_genres: z.array(z.string()).optional(),
+          min_year: z.number().optional(),
+          max_year: z.number().optional()
+        });
+        const { user_id, exclude_genres, min_year, max_year } =
+          schema.parse(args);
+        const result = await getRecommendationsFromHistory(user_id, {
+          excludeGenres: exclude_genres,
+          minYear: min_year,
+          maxYear: max_year
+        });
         return { result };
       }
       case "get_user_feedback": {
