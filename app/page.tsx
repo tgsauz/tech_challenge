@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import type { MovieCard } from "@/components/MovieCardGrid";
 import { MovieCardGrid } from "@/components/MovieCardGrid";
-import type { SongCard } from "@/components/SongCardGrid";
-import { SongCardGrid } from "@/components/SongCardGrid";
 import { DebugPanel } from "@/components/DebugPanel";
 
 type Role = "user" | "assistant";
@@ -12,7 +10,6 @@ type Role = "user" | "assistant";
 type AssistantMessagePayload = {
   message: string;
   movies?: MovieCard[];
-  songs?: SongCard[];
 };
 
 type ChatMessage = {
@@ -20,7 +17,6 @@ type ChatMessage = {
   role: Role;
   content: string;
   movies?: MovieCard[];
-  songs?: SongCard[];
 };
 
 type DebugEvent = {
@@ -162,8 +158,7 @@ export default function HomePage() {
           id: crypto.randomUUID(),
           role: "assistant",
           content: payload.message ?? "",
-          movies: payload.movies ?? [],
-          songs: payload.songs ?? []
+          movies: payload.movies ?? []
         };
         setMessages((prev) => [...prev, assistantMsg]);
       } else {
@@ -219,39 +214,38 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-black text-zinc-50">
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-4 py-6">
-        <header className="mb-2 border-b border-zinc-800 pb-3">
+    <div className="app-shell flex min-h-screen text-zinc-50">
+      <main className="app-main mx-auto flex flex-1 flex-col gap-4 px-4 py-6">
+        <header className="app-header mb-2 pb-3">
           <h1 className="text-2xl font-semibold">
-            Gleni Movie &amp; Music Discovery Chatbot
+            Gleni Movie Discovery Chatbot
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Ask for movie and music recommendations, cross references between
-            films and songs, and more.
+            Ask for movie recommendations and more.
           </p>
         </header>
 
         <div className="flex flex-1 flex-col gap-4 lg:flex-row">
-          <section className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+          <section className="app-panel flex-1 rounded-xl p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
                 Chat
               </h2>
               <button
                 type="button"
-                className="text-xs text-zinc-400 underline"
+                className="ghost-button text-xs underline"
                 onClick={() => setShowDebug((v) => !v)}
               >
                 {showDebug ? "Hide debug" : "Show debug"}
               </button>
             </div>
 
-            <div className="mb-3 h-[420px] space-y-3 overflow-y-auto rounded-lg bg-black/60 p-3">
+            <div className="chat-window mb-3 space-y-3 overflow-y-auto rounded-lg p-3">
               {messages.length === 0 && (
                 <p className="text-sm text-zinc-400">
-                  Start by telling me a movie or song you like. For example:
-                  &quot;I loved Inception and Interstellar&quot; or &quot;What
-                  songs are in Pulp Fiction?&quot;
+                  Start by telling me a movie you like. For example:
+                  &quot;I loved Inception and Interstellar&quot; or &quot;Give
+                  me movies like Arrival&quot;.
                 </p>
               )}
               {messages.map((m) => (
@@ -263,18 +257,17 @@ export default function HomePage() {
                 >
                   <div className="max-w-[80%] space-y-2">
                     <div
-                      className={`rounded-lg px-3 py-2 text-sm ${
+                      className={`chat-bubble text-sm ${
                         m.role === "user"
-                          ? "bg-zinc-100 text-black"
-                          : "bg-zinc-800 text-zinc-50"
+                          ? "chat-bubble-user"
+                          : "chat-bubble-assistant"
                       }`}
                     >
                       {m.content}
                     </div>
 
                     {m.role === "assistant" &&
-                      ((m.movies?.length ?? 0) > 0 ||
-                        (m.songs?.length ?? 0) > 0) && (
+                      (m.movies?.length ?? 0) > 0 && (
                         <div className="space-y-2">
                           <MovieCardGrid
                             movies={m.movies}
@@ -282,7 +275,6 @@ export default function HomePage() {
                             feedbackById={movieFeedback}
                             feedbackStatusById={feedbackStatus}
                           />
-                          <SongCardGrid songs={m.songs} />
                         </div>
                       )}
                   </div>
@@ -297,8 +289,8 @@ export default function HomePage() {
 
             <div className="space-y-2">
               <textarea
-                className="h-20 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-sm outline-none focus:border-zinc-300"
-                placeholder="Ask for recommendations, soundtracks, or movies with specific songs..."
+                className="text-input h-20 w-full resize-none rounded-lg p-2 text-sm outline-none"
+                placeholder="Ask for recommendations or movies like a favorite..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -308,14 +300,14 @@ export default function HomePage() {
                 <span className="text-xs text-zinc-500">
                   {error && <span className="text-red-400">{error}</span>}
                   {!error && isLoading && (
-                    <span>Working with TMDB, Spotify and OpenAI…</span>
+                    <span>Working with TMDB and OpenAI…</span>
                   )}
                 </span>
                 <button
                   type="button"
                   disabled={isLoading || !input.trim() || !userId}
                   onClick={handleSend}
-                  className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-black disabled:cursor-not-allowed disabled:bg-zinc-600"
+                  className="action-button text-sm"
                 >
                   {isLoading ? "Thinking..." : "Send"}
                 </button>

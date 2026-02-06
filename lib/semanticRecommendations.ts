@@ -23,7 +23,8 @@ import { supabase } from "./supabaseClient";
 import type { MovieDetails, MovieSummary } from "./tmdb";
 
 const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY
+  apiKey: OPENAI_API_KEY,
+  timeout: 8000
 });
 
 export type SemanticMovieRecommendation = MovieSummary & {
@@ -90,4 +91,3 @@ export async function getSemanticMovieRecommendations(
     } satisfies SemanticMovieRecommendation;
   });
 }
-

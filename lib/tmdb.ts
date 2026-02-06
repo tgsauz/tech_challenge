@@ -1,10 +1,11 @@
 /**
  * TMDB (The Movie Database) API client.
- * Handles movie search, details, recommendations, and soundtrack data.
+ * Handles movie search, details, and recommendations.
  */
 
 import { z } from "zod";
 import { config } from "./config";
+import { fetchWithTimeout } from "./http";
 
 // Base URL for TMDB API v3
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
@@ -89,7 +90,7 @@ export async function searchMovies(query: string): Promise<MovieSummary[]> {
   url.searchParams.set("page", "1");
 
   try {
-    const response = await fetch(url.toString(), {
+    const response = await fetchWithTimeout(url.toString(), {
       headers: {
         Accept: "application/json"
       }
@@ -143,7 +144,7 @@ export async function getMovieDetails(movieId: number): Promise<MovieDetails> {
   url.searchParams.set("append_to_response", "credits");
 
   try {
-    const response = await fetch(url.toString(), {
+    const response = await fetchWithTimeout(url.toString(), {
       headers: {
         Accept: "application/json"
       }
@@ -212,7 +213,9 @@ export async function getMovieRecommendations(
     const url = new URL(`${TMDB_BASE_URL}/genre/movie/list`);
     url.searchParams.set("api_key", apiKey);
     url.searchParams.set("language", "en-US");
-    const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+    const res = await fetchWithTimeout(url.toString(), {
+      headers: { Accept: "application/json" }
+    });
     if (!res.ok) throw new Error(`Failed to fetch genres: ${res.status}`);
     const json = await res.json();
     const parsed = z.object({ genres: z.array(TmdbGenreSchema) }).parse(json);
@@ -240,7 +243,9 @@ export async function getMovieRecommendations(
         url.searchParams.set("api_key", apiKey);
         url.searchParams.set("language", "en-US");
         url.searchParams.set("page", "1");
-        return fetch(url.toString(), { headers: { Accept: "application/json" } });
+        return fetchWithTimeout(url.toString(), {
+          headers: { Accept: "application/json" }
+        });
       })
     );
 
@@ -293,69 +298,6 @@ export async function getMovieRecommendations(
       posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
       genres: (movie.genre_ids ?? []).map((id) => genreLookup.get(id)).filter(Boolean) as string[]
     }));
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new Error(`TMDB API returned unexpected format: ${error.message}`);
-    }
-    throw error;
-  }
-}
-
-/**
- * Get soundtrack/music information for a movie.
- * Note: TMDB doesn't have a dedicated soundtrack endpoint, so we use credits
- * to find music department crew and make best-effort guesses.
- */
-export async function getMovieSoundtrack(
-  movieId: number
-): Promise<Array<{ songTitle: string; artist?: string; source: string }>> {
-  if (!config.tmdbApiKey) {
-    throw new Error("TMDB_API_KEY is not configured");
-  }
-
-  const url = new URL(`${TMDB_BASE_URL}/movie/${movieId}`);
-  url.searchParams.set("api_key", config.tmdbApiKey);
-  url.searchParams.set("language", "en-US");
-  url.searchParams.set("append_to_response", "credits");
-
-  try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        Accept: "application/json"
-      }
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`Movie with ID ${movieId} not found`);
-      }
-      throw new Error(`TMDB API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const credits = data.credits
-      ? TmdbCreditsSchema.parse(data.credits)
-      : { crew: [], cast: [] };
-
-    // Extract music department crew (composers, music supervisors, etc.)
-    const musicCrew = credits.crew.filter(
-      (person) =>
-        person.department === "Sound" ||
-        person.department === "Music" ||
-        person.job.toLowerCase().includes("music") ||
-        person.job.toLowerCase().includes("composer")
-    );
-
-    // Best-effort: return music crew names as "artists"
-    // In a real app, we'd cross-reference with Spotify or other music APIs
-    const soundtrack: Array<{ songTitle: string; artist?: string; source: string }> =
-      musicCrew.map((person) => ({
-        songTitle: `Music by ${person.name}`,
-        artist: person.name,
-        source: "tmdb_credits"
-      }));
-
-    return soundtrack;
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new Error(`TMDB API returned unexpected format: ${error.message}`);

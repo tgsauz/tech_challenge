@@ -25,20 +25,6 @@ const assistantPayloadSchema = z.object({
       })
     )
     .optional()
-    .default([]),
-  songs: z
-    .array(
-      z.object({
-        id: z.union([z.number(), z.string()]),
-        name: z.string(),
-        artists: z.array(z.string()).optional().default([]),
-        album: z.string().nullable().optional(),
-        releaseYear: z.number().nullable().optional(),
-        previewUrl: z.string().nullable().optional(),
-        source: z.string().optional()
-      })
-    )
-    .optional()
     .default([])
 });
 
@@ -74,8 +60,7 @@ export async function POST(req: Request) {
       // Fallback: treat it as plain text
       payload = {
         message: assistantMessage,
-        movies: [],
-        songs: []
+        movies: []
       };
     }
 
@@ -110,4 +95,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

@@ -10,14 +10,14 @@ type Props = {
 
 export function DebugPanel({ events }: Props) {
   return (
-    <aside className="w-64 rounded-xl border border-zinc-800 bg-black/80 p-3 text-xs">
+    <aside className="debug-panel w-64 rounded-xl p-3 text-xs">
       <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
         Debug panel
       </h2>
       <p className="mb-2 text-[11px] text-zinc-500">
         Shows which tools the AI used, short descriptions, token usage, and any
-        errors. Useful to prove the bot is doing real work with TMDB, Spotify,
-        Supabase, and the database.
+        errors. Useful to prove the bot is doing real work with TMDB, Supabase,
+        and the database.
       </p>
       <div className="space-y-1 overflow-y-auto">
         {events.length === 0 && (
@@ -38,4 +38,3 @@ export function DebugPanel({ events }: Props) {
     </aside>
   );
 }
-

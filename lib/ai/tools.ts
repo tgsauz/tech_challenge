@@ -1,6 +1,6 @@
 /**
  * OpenAI tool definitions and execution logic.
- * Maps tool names to our actual functions (TMDB, Spotify, persistence, cross-reference).
+ * Maps tool names to our actual functions (TMDB, persistence, cross-reference).
  */
 
 import OpenAI from "openai";
@@ -8,23 +8,14 @@ import { z } from "zod";
 import {
   searchMovies,
   getMovieDetails,
-  getMovieRecommendations,
-  getMovieSoundtrack
+  getMovieRecommendations
 } from "../tmdb";
 import {
-  searchTracks,
-  getTrackDetails,
-  getTrackRecommendations,
-  getTrackAlbum
-} from "../spotify";
-import {
   saveWatchedMovie,
-  saveListenedSong,
   getUserHistory,
   getRecommendationsFromHistory,
   getUserFeedback
 } from "../persistence";
-import { findMoviesWithSong, findSongsInMovie } from "../crossReference";
 import { getSemanticMovieRecommendations } from "../semanticRecommendations";
 
 /**
@@ -105,139 +96,7 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       }
     }
   },
-  {
-    type: "function",
-    function: {
-      name: "get_movie_soundtrack",
-      description:
-        "Get soundtrack/music information for a movie. Use this when the user asks about songs in a movie.",
-      parameters: {
-        type: "object",
-        properties: {
-          movie_id: {
-            type: "number",
-            description: "TMDB movie ID"
-          }
-        },
-        required: ["movie_id"]
-      }
-    }
-  },
-  // Spotify tools
-  {
-    type: "function",
-    function: {
-      name: "search_tracks",
-      description:
-        "Search for songs/tracks on Spotify. Use this when the user mentions a song name or artist.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "Song name, artist, or combination to search for"
-          }
-        },
-        required: ["query"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_track_details",
-      description:
-        "Get detailed information about a specific track by its Spotify ID.",
-      parameters: {
-        type: "object",
-        properties: {
-          track_id: {
-            type: "string",
-            description: "Spotify track ID"
-          }
-        },
-        required: ["track_id"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_track_recommendations",
-      description:
-        "Get song recommendations based on seed tracks. Use this when the user wants similar songs.",
-      parameters: {
-        type: "object",
-        properties: {
-          seed_tracks: {
-            type: "array",
-            items: { type: "string" },
-            description: "Array of Spotify track IDs (1-5 tracks)"
-          }
-        },
-        required: ["seed_tracks"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_track_albums",
-      description:
-        "Get album information for a track. Useful for finding soundtrack albums.",
-      parameters: {
-        type: "object",
-        properties: {
-          track_id: {
-            type: "string",
-            description: "Spotify track ID"
-          }
-        },
-        required: ["track_id"]
-      }
-    }
-  },
   // Cross-reference tools
-  {
-    type: "function",
-    function: {
-      name: "find_movies_with_song",
-      description:
-        "Find movies that feature a specific song. Use this when the user asks 'which movies have this song?' or similar.",
-      parameters: {
-        type: "object",
-        properties: {
-          song_name: {
-            type: "string",
-            description: "Name of the song"
-          },
-          artist: {
-            type: "string",
-            description: "Optional: artist name for better matching"
-          }
-        },
-        required: ["song_name"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "find_songs_in_movie",
-      description:
-        "Find songs featured in a specific movie. Use this when the user asks 'what songs are in this movie?' or 'soundtrack of X'.",
-      parameters: {
-        type: "object",
-        properties: {
-          movie_title: {
-            type: "string",
-            description: "Title of the movie"
-          }
-        },
-        required: ["movie_title"]
-      }
-    }
-  },
   // Persistence tools
   {
     type: "function",
@@ -268,39 +127,9 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "save_listened_song",
-      description:
-        "Save a song to the user's listened list. Use this when the user says they listened to, liked, or enjoyed a song.",
-      parameters: {
-        type: "object",
-        properties: {
-          track_id: {
-            type: "string",
-            description: "Spotify track ID"
-          },
-          track_name: {
-            type: "string",
-            description: "Track name"
-          },
-          artist: {
-            type: "string",
-            description: "Artist name(s)"
-          },
-          user_id: {
-            type: "string",
-            description: "User ID"
-          }
-        },
-        required: ["track_id", "track_name", "artist", "user_id"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "get_user_history",
       description:
-        "Get the user's watched movies and listened songs history. Use this when the user asks about their history or what they've watched/listened to.",
+        "Get the user's watched movies history. Use this when the user asks about their history or what they've watched.",
       parameters: {
         type: "object",
         properties: {
@@ -318,7 +147,7 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "get_recommendations_from_history",
       description:
-        "Generate personalized recommendations based on the user's saved history. Use this when the user asks for recommendations based on what they've watched/listened to.",
+        "Generate personalized recommendations based on the user's saved history. Use this when the user asks for recommendations based on what they've watched.",
       parameters: {
         type: "object",
         properties: {
@@ -388,53 +217,7 @@ export async function executeTool(
         const results = await getSemanticMovieRecommendations(seed);
         return { result: results };
       }
-      case "get_movie_soundtrack": {
-        const schema = z.object({ movie_id: z.number() });
-        const { movie_id } = schema.parse(args);
-        const results = await getMovieSoundtrack(movie_id);
-        return { result: results };
-      }
-      // Spotify tools
-      case "search_tracks": {
-        const schema = z.object({ query: z.string() });
-        const { query } = schema.parse(args);
-        const results = await searchTracks(query);
-        return { result: results };
-      }
-      case "get_track_details": {
-        const schema = z.object({ track_id: z.string() });
-        const { track_id } = schema.parse(args);
-        const result = await getTrackDetails(track_id);
-        return { result };
-      }
-      case "get_track_recommendations": {
-        const schema = z.object({ seed_tracks: z.array(z.string()) });
-        const { seed_tracks } = schema.parse(args);
-        const results = await getTrackRecommendations(seed_tracks);
-        return { result: results };
-      }
-      case "get_track_albums": {
-        const schema = z.object({ track_id: z.string() });
-        const { track_id } = schema.parse(args);
-        const result = await getTrackAlbum(track_id);
-        return { result };
-      }
       // Cross-reference tools
-      case "find_movies_with_song": {
-        const schema = z.object({
-          song_name: z.string(),
-          artist: z.string().optional()
-        });
-        const { song_name, artist } = schema.parse(args);
-        const results = await findMoviesWithSong(song_name, artist);
-        return { result: results };
-      }
-      case "find_songs_in_movie": {
-        const schema = z.object({ movie_title: z.string() });
-        const { movie_title } = schema.parse(args);
-        const results = await findSongsInMovie(movie_title);
-        return { result: results };
-      }
       // Persistence tools
       case "save_watched_movie": {
         const schema = z.object({
@@ -445,17 +228,6 @@ export async function executeTool(
         const { movie_id, movie_title, user_id } = schema.parse(args);
         await saveWatchedMovie(user_id, movie_id, movie_title);
         return { result: { success: true, message: "Movie saved to history" } };
-      }
-      case "save_listened_song": {
-        const schema = z.object({
-          track_id: z.string(),
-          track_name: z.string(),
-          artist: z.string(),
-          user_id: z.string()
-        });
-        const { track_id, track_name, artist, user_id } = schema.parse(args);
-        await saveListenedSong(user_id, track_id, track_name, artist);
-        return { result: { success: true, message: "Song saved to history" } };
       }
       case "get_user_history": {
         const schema = z.object({ user_id: z.string() });

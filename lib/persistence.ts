@@ -1,11 +1,10 @@
 /**
- * Persistence helpers for user history (watched movies, listened songs).
+ * Persistence helpers for user history (watched movies).
  * Uses Prisma to interact with SQLite database.
  */
 
 import { prisma } from "./prisma";
 import { getMovieRecommendations } from "./tmdb";
-import { getTrackRecommendations } from "./spotify";
 
 /** Removes duplicate items based on `id` using a Set for O(n) performance */
 function uniqueById<T extends { id: string | number }>(items: T[]): T[] {
@@ -58,47 +57,7 @@ export async function saveWatchedMovie(
 }
 
 /**
- * Save a listened song to the user's history.
- * If the song is already saved, this is a no-op (idempotent).
- */
-export async function saveListenedSong(
-  userId: string,
-  trackId: string,
-  trackName: string,
-  artist: string
-): Promise<void> {
-  try {
-    if (!userId || !trackId || !trackName) {
-      throw new Error("Invalid arguments passed to saveListenedSong");
-    }
-    await prisma.listenedSong.upsert({
-      where: {
-        userId_trackId: {
-          userId,
-          trackId
-        }
-      },
-      create: {
-        userId,
-        trackId,
-        trackName,
-        artist
-      },
-      update: {
-        // Update metadata and refresh timestamp
-        trackName,
-        artist,
-        addedAt: new Date()
-      }
-    });
-  } catch (error) {
-    console.error(error);
-    throw new Error(`Failed to save listened song: ${String(error)}`);
-  }
-}
-
-/**
- * Get the user's complete history (watched movies and listened songs).
+ * Get the user's complete history (watched movies).
  */
 export async function getUserHistory(userId: string): Promise<{
   watchedMovies: Array<{
@@ -107,25 +66,12 @@ export async function getUserHistory(userId: string): Promise<{
     movieTitle: string;
     addedAt: Date;
   }>;
-  listenedSongs: Array<{
-    id: string;
-    trackId: string;
-    trackName: string;
-    artist: string;
-    addedAt: Date;
-  }>;
 }> {
   try {
-    const [watchedMovies, listenedSongs] = await Promise.all([
-      prisma.watchedMovie.findMany({
-        where: { userId },
-        orderBy: { addedAt: "desc" }
-      }),
-      prisma.listenedSong.findMany({
-        where: { userId },
-        orderBy: { addedAt: "desc" }
-      })
-    ] as const);
+    const watchedMovies = await prisma.watchedMovie.findMany({
+      where: { userId },
+      orderBy: { addedAt: "desc" }
+    });
 
     return {
       watchedMovies: watchedMovies.map((m) => ({
@@ -133,13 +79,6 @@ export async function getUserHistory(userId: string): Promise<{
         movieId: m.movieId,
         movieTitle: m.movieTitle,
         addedAt: m.addedAt
-      })),
-      listenedSongs: listenedSongs.map((s) => ({
-        id: s.id,
-        trackId: s.trackId,
-        trackName: s.trackName,
-        artist: s.artist,
-        addedAt: s.addedAt
       }))
     };
   } catch (error) {
@@ -150,7 +89,7 @@ export async function getUserHistory(userId: string): Promise<{
 
 /**
  * Generate recommendations based on the user's saved history.
- * Returns movie and song recommendations by analyzing their watched/listened content.
+ * Returns movie recommendations based on watched content.
  */
 export async function getRecommendationsFromHistory(userId: string): Promise<{
   movieRecommendations: Array<{
@@ -160,15 +99,6 @@ export async function getRecommendationsFromHistory(userId: string): Promise<{
     overview: string | null;
     posterUrl: string | null;
     genres: string[];
-  }>;
-  songRecommendations: Array<{
-    id: string;
-    name: string;
-    artists: string[];
-    album: string;
-    releaseYear: number | null;
-    previewUrl: string | null;
-    popularity?: number;
   }>;
 }> {
   try {
@@ -185,20 +115,8 @@ export async function getRecommendationsFromHistory(userId: string): Promise<{
     const movieRecsArrays = await Promise.all(movieRecsPromises);
     const movieRecommendations = uniqueById(movieRecsArrays.flat()).slice(0, 10);
 
-    // Get recommendations for the last 3 listened songs
-    const recentSongs = history.listenedSongs.slice(0, 3);
-    const songRecsPromises = recentSongs.map((s) =>
-      getTrackRecommendations([s.trackId]).catch((err) => {
-        console.error("getTrackRecommendations error:", err);
-        return [] as any[];
-      })
-    );
-    const songRecsArrays = await Promise.all(songRecsPromises);
-    const songRecommendations = uniqueById(songRecsArrays.flat()).slice(0, 10);
-
     return {
-      movieRecommendations,
-      songRecommendations
+      movieRecommendations
     };
   } catch (error) {
     throw new Error(`Failed to get recommendations from history: ${error}`);

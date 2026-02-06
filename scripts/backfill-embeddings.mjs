@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { PrismaClient } from "@prisma/client";
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -37,11 +38,27 @@ for (const key of REQUIRED) {
   }
 }
 
+const includeDb =
+  process.argv.includes("--include-db") ||
+  process.env.BACKFILL_INCLUDE_DB === "1";
+
+if (includeDb && !process.env.DATABASE_URL) {
+  console.error("Missing required env: DATABASE_URL (needed for --include-db)");
+  process.exit(1);
+}
+
 const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
 const limit = Number(
   (limitArg ? limitArg.split("=")[1] : null) ??
     process.env.BACKFILL_LIMIT ??
     2000
+);
+
+const dbLimitArg = process.argv.find((arg) => arg.startsWith("--db-limit="));
+const dbLimit = Number(
+  (dbLimitArg ? dbLimitArg.split("=")[1] : null) ??
+    process.env.BACKFILL_DB_LIMIT ??
+    500
 );
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -50,6 +67,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } }
 );
+const prisma = includeDb ? new PrismaClient() : null;
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
@@ -99,6 +117,23 @@ async function fetchMoviesFromEndpoint(endpoint, pages, genreMap, seen) {
   return movies;
 }
 
+async function fetchMovieDetailsById(movieId) {
+  const url = new URL(`${TMDB_BASE}/movie/${movieId}`);
+  url.searchParams.set("api_key", process.env.TMDB_API_KEY);
+  url.searchParams.set("language", "en-US");
+  const data = await fetchJson(url.toString());
+  return {
+    tmdb_id: data.id,
+    title: data.title,
+    overview: data.overview ?? null,
+    genres: Array.isArray(data.genres) ? data.genres.map((g) => g.name) : [],
+    year: data.release_date ? Number(data.release_date.split("-")[0]) : null,
+    poster_url: data.poster_path
+      ? `https://image.tmdb.org/t/p/w500${data.poster_path}`
+      : null
+  };
+}
+
 function buildEmbeddingInput(movie) {
   const parts = [
     `${movie.title}${movie.year ? ` (${movie.year})` : ""}`,
@@ -117,10 +152,35 @@ async function getExistingTmdbIds() {
 }
 
 async function main() {
-  console.log(`Backfill starting (limit=${limit})...`);
+  console.log(
+    `Backfill starting (tmdbLimit=${limit}, includeDb=${includeDb}, dbLimit=${dbLimit})...`
+  );
 
   const genreMap = await getGenreMap();
   const seen = new Set();
+  let dbMovies = [];
+  if (includeDb && prisma) {
+    const watched = await prisma.watchedMovie.findMany({
+      distinct: ["movieId"],
+      select: { movieId: true, movieTitle: true },
+      orderBy: { addedAt: "desc" },
+      take: dbLimit
+    });
+    for (const item of watched) {
+      if (seen.has(item.movieId)) continue;
+      try {
+        const details = await fetchMovieDetailsById(item.movieId);
+        seen.add(item.movieId);
+        dbMovies.push(details);
+      } catch (err) {
+        console.warn(
+          `Failed to fetch TMDB details for watched movie ${item.movieId} (${item.movieTitle}): ${err.message}`
+        );
+      }
+    }
+    console.log(`Loaded ${dbMovies.length} movies from DB history.`);
+  }
+
   const sources = [
     { endpoint: "/movie/popular", pages: 50 },
     { endpoint: "/movie/top_rated", pages: 50 },
@@ -141,6 +201,9 @@ async function main() {
 
   movies = movies.slice(0, limit);
   console.log(`Fetched ${movies.length} movies from TMDB.`);
+
+  movies = dbMovies.concat(movies);
+  console.log(`Total candidate movies: ${movies.length}.`);
 
   const existing = await getExistingTmdbIds();
   const toInsert = movies.filter((m) => !existing.has(m.tmdb_id));
@@ -169,9 +232,15 @@ async function main() {
   }
 
   console.log("Backfill complete.");
+  if (prisma) {
+    await prisma.$disconnect();
+  }
 }
 
 main().catch((err) => {
   console.error(err);
+  if (prisma) {
+    prisma.$disconnect().catch(() => undefined);
+  }
   process.exit(1);
 });

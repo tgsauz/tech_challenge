@@ -24,3 +24,176 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.app-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(80% 60% at 10% 0%, rgba(99, 102, 241, 0.18), transparent 55%),
+    radial-gradient(70% 50% at 90% 10%, rgba(16, 185, 129, 0.12), transparent 55%),
+    linear-gradient(180deg, #050505 0%, #0b0b0d 35%, #050505 100%);
+  color: #f4f4f5;
+}
+
+.app-main {
+  width: 100%;
+  max-width: 72rem;
+}
+
+.app-header {
+  border-bottom: 1px solid rgba(63, 63, 70, 0.65);
+}
+
+.app-panel {
+  border: 1px solid rgba(63, 63, 70, 0.7);
+  background: linear-gradient(180deg, rgba(9, 9, 11, 0.92), rgba(9, 9, 11, 0.7));
+  box-shadow: 0 24px 60px -40px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(16px);
+}
+
+.chat-window {
+  height: clamp(320px, 55vh, 540px);
+  background:
+    radial-gradient(60% 120% at 0% 0%, rgba(39, 39, 42, 0.35), transparent 65%),
+    rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(63, 63, 70, 0.6);
+  scrollbar-color: rgba(113, 113, 122, 0.6) transparent;
+  scrollbar-width: thin;
+}
+
+.chat-window::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-window::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.6);
+  border-radius: 999px;
+}
+
+.chat-bubble {
+  border-radius: 14px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 20px -18px rgba(0, 0, 0, 0.9);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.chat-bubble-user {
+  background: #f4f4f5;
+  color: #09090b;
+}
+
+.chat-bubble-assistant {
+  background: rgba(39, 39, 42, 0.9);
+  color: #f4f4f5;
+}
+
+.text-input {
+  border: 1px solid rgba(82, 82, 91, 0.9);
+  background: rgba(9, 9, 11, 0.9);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.text-input:focus {
+  border-color: rgba(212, 212, 216, 0.8);
+  box-shadow: 0 0 0 3px rgba(244, 244, 245, 0.08);
+}
+
+.ghost-button {
+  color: rgba(212, 212, 216, 0.8);
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+
+.ghost-button:hover {
+  color: #f4f4f5;
+}
+
+.action-button {
+  border-radius: 999px;
+  padding: 0.45rem 1.25rem;
+  font-weight: 600;
+  color: #09090b;
+  background: linear-gradient(135deg, #f4f4f5 0%, #d4d4d8 100%);
+  box-shadow: 0 12px 24px -18px rgba(0, 0, 0, 0.9);
+  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+
+.action-button:hover {
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 16px 30px -20px rgba(0, 0, 0, 0.9);
+}
+
+.action-button:disabled {
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.card-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.card {
+  border: 1px solid rgba(63, 63, 70, 0.7);
+  background: rgba(24, 24, 27, 0.88);
+  border-radius: 14px;
+  box-shadow: 0 12px 24px -20px rgba(0, 0, 0, 0.9);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  animation: card-rise 420ms ease both;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(148, 163, 184, 0.8);
+  box-shadow: 0 18px 36px -24px rgba(0, 0, 0, 0.9);
+}
+
+.feedback-button {
+  border: 1px solid rgba(82, 82, 91, 0.9);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  color: rgba(244, 244, 245, 0.9);
+  background: rgba(9, 9, 11, 0.2);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.feedback-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(148, 163, 184, 0.8);
+}
+
+.feedback-button.is-active {
+  border-color: rgba(244, 244, 245, 0.9);
+  background: #f4f4f5;
+  color: #09090b;
+}
+
+.debug-panel {
+  border: 1px solid rgba(63, 63, 70, 0.7);
+  background: rgba(9, 9, 11, 0.85);
+  box-shadow: 0 16px 40px -30px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .chat-bubble,
+  .action-button,
+  .feedback-button {
+    animation: none;
+    transition: none;
+  }
+}

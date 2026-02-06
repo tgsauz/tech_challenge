@@ -28,11 +28,11 @@ export function MovieCardGrid({
       <p className="text-xs font-semibold text-zinc-400">
         Movie recommendations
       </p>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="card-grid">
         {movies.map((movie) => (
           <div
             key={movie.id}
-            className="flex gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2"
+            className="card flex gap-2 p-2"
           >
             {movie.posterUrl && (
               <img
@@ -62,10 +62,10 @@ export function MovieCardGrid({
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     type="button"
-                    className={`rounded border px-2 py-0.5 text-[11px] transition ${
+                    className={`feedback-button ${
                       feedbackById?.[String(movie.id)] === 1
-                        ? "border-zinc-200 bg-zinc-100 text-black"
-                        : "border-zinc-700 text-zinc-200 hover:border-zinc-400"
+                        ? "is-active"
+                        : ""
                     }`}
                     onClick={() => onFeedback(movie.id, 1)}
                     aria-label={`Like ${movie.title}`}
@@ -74,10 +74,10 @@ export function MovieCardGrid({
                   </button>
                   <button
                     type="button"
-                    className={`rounded border px-2 py-0.5 text-[11px] transition ${
+                    className={`feedback-button ${
                       feedbackById?.[String(movie.id)] === -1
-                        ? "border-zinc-200 bg-zinc-100 text-black"
-                        : "border-zinc-700 text-zinc-200 hover:border-zinc-400"
+                        ? "is-active"
+                        : ""
                     }`}
                     onClick={() => onFeedback(movie.id, -1)}
                     aria-label={`Dislike ${movie.title}`}

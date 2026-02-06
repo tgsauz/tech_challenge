@@ -23,20 +23,6 @@ const assistantPayloadSchema = z.object({
       })
     )
     .optional()
-    .default([]),
-  songs: z
-    .array(
-      z.object({
-        id: z.union([z.number(), z.string()]),
-        name: z.string(),
-        artists: z.array(z.string()).optional().default([]),
-        album: z.string().nullable().optional(),
-        releaseYear: z.number().nullable().optional(),
-        previewUrl: z.string().nullable().optional(),
-        source: z.string().optional()
-      })
-    )
-    .optional()
     .default([])
 });
 
@@ -89,16 +75,14 @@ export async function POST(req: Request) {
             id: m.id,
             role: "assistant" as const,
             content: parsed.message,
-            movies: parsed.movies,
-            songs: parsed.songs
+            movies: parsed.movies
           };
         } catch {
           return {
             id: m.id,
             role: "assistant" as const,
             content: m.content,
-            movies: [],
-            songs: []
+            movies: []
           };
         }
       }
@@ -108,8 +92,7 @@ export async function POST(req: Request) {
         id: m.id,
         role: m.role === "user" ? ("user" as const) : ("assistant" as const),
         content: m.content,
-        movies: [],
-        songs: []
+        movies: []
       };
     });
 
@@ -125,4 +108,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

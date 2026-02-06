@@ -35,17 +35,6 @@ model WatchedMovie {
   @@unique([userId, movieId])
 }
 
-model ListenedSong {
-  id        String   @id @default(cuid())
-  userId    String
-  trackId   String
-  trackName String
-  artist    String
-  addedAt   DateTime @default(now())
-
-  @@unique([userId, trackId])
-}
-
 model Feedback {
   id        String   @id @default(cuid())
   userId    String

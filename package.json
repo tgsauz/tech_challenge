@@ -12,7 +12,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "vercel-build": "prisma generate && next build",
-    "backfill:embeddings": "node scripts/backfill-embeddings.mjs"
+    "backfill:embeddings": "node scripts/backfill-embeddings.mjs",
+    "backfill:embeddings:full": "node scripts/backfill-embeddings.mjs --include-db"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
