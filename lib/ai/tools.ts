@@ -216,6 +216,10 @@ export async function executeTool(
         const seed = await getMovieDetails(movie_id);
         try {
           const results = await getSemanticMovieRecommendations(seed);
+          if (!results || results.length === 0) {
+            const fallback = await getMovieRecommendations(movie_id);
+            return { result: fallback };
+          }
           return { result: results };
         } catch (error) {
           console.warn(

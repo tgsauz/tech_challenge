@@ -7,6 +7,12 @@ const historyRequestSchema = z.object({
   conversationId: z.string().optional()
 });
 
+const historyDeleteSchema = z.object({
+  userId: z.string().min(1),
+  conversationId: z.string().optional(),
+  clearAll: z.boolean().optional()
+});
+
 // Reuse the same assistant payload shape used in /api/chat
 const assistantPayloadSchema = z.object({
   message: z.string(),
@@ -104,6 +110,67 @@ export async function POST(req: Request) {
     console.error("History API error:", error);
     return NextResponse.json(
       { error: "Failed to load history" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const json = await req.json().catch(() => null);
+    const parseResult = historyDeleteSchema.safeParse(json);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 }
+      );
+    }
+
+    const { userId, conversationId, clearAll } = parseResult.data;
+
+    if (clearAll) {
+      const deleted = await prisma.$transaction([
+        prisma.conversation.deleteMany({ where: { userId } }),
+        prisma.feedback.deleteMany({ where: { userId } }),
+        prisma.watchedMovie.deleteMany({ where: { userId } })
+      ]);
+
+      return NextResponse.json({
+        cleared: true,
+        deleted
+      });
+    }
+
+    let conversation = null;
+
+    if (conversationId) {
+      conversation = await prisma.conversation.findFirst({
+        where: { id: conversationId, userId }
+      });
+    } else {
+      conversation = await prisma.conversation.findFirst({
+        where: { userId },
+        orderBy: { createdAt: "desc" }
+      });
+    }
+
+    if (!conversation) {
+      return NextResponse.json({ cleared: false });
+    }
+
+    await prisma.conversation.delete({
+      where: { id: conversation.id }
+    });
+
+    return NextResponse.json({
+      cleared: true,
+      conversationId: conversation.id
+    });
+  } catch (error) {
+    console.error("History DELETE error:", error);
+    return NextResponse.json(
+      { error: "Failed to clear history" },
       { status: 500 }
     );
   }

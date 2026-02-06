@@ -30,8 +30,11 @@ export default function HomePage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clearStatus, setClearStatus] = useState<string | null>(null);
   const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
   const [showDebug, setShowDebug] = useState(false);
+  const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
+  const [clearHistoryConfirmText, setClearHistoryConfirmText] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [movieFeedback, setMovieFeedback] = useState<
@@ -107,9 +110,22 @@ export default function HomePage() {
     })();
   }, [userId]);
 
+  useEffect(() => {
+    if (!showClearHistoryConfirm) return;
+    setClearHistoryConfirmText("");
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowClearHistoryConfirm(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showClearHistoryConfirm]);
+
   async function handleSend() {
     if (!input.trim() || !userId) return;
     setError(null);
+    setClearStatus(null);
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
@@ -172,6 +188,80 @@ export default function HomePage() {
     }
   }
 
+  async function handleClearChat() {
+    if (!userId || isLoading || messages.length === 0) return;
+
+    try {
+      const res = await fetch("/api/history", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ userId, conversationId })
+      });
+
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => null);
+        console.error("Clear chat failed", res.status, bodyText);
+        setError(bodyText ?? `Request failed (${res.status})`);
+        return;
+      }
+
+      setMessages([]);
+      setDebugEvents([]);
+      setConversationId(null);
+      setError(null);
+      setInput("");
+      setClearStatus("Chat cleared.");
+      setMovieFeedback({});
+      setFeedbackStatus({});
+      window.setTimeout(() => {
+        setClearStatus(null);
+      }, 2500);
+    } catch (err) {
+      console.error("Failed to clear chat", err);
+      setError("Failed to clear chat. Please try again.");
+    }
+  }
+
+  async function handleClearHistory() {
+    if (!userId || isLoading) return;
+
+    try {
+      const res = await fetch("/api/history", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ userId, clearAll: true })
+      });
+
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => null);
+        console.error("Clear history failed", res.status, bodyText);
+        setError(bodyText ?? `Request failed (${res.status})`);
+        return;
+      }
+
+      setMessages([]);
+      setDebugEvents([]);
+      setConversationId(null);
+      setError(null);
+      setInput("");
+      setMovieFeedback({});
+      setFeedbackStatus({});
+      setClearStatus("History cleared.");
+      window.setTimeout(() => {
+        setClearStatus(null);
+      }, 2500);
+      setClearHistoryConfirmText("");
+      setShowClearHistoryConfirm(false);
+    } catch (err) {
+      console.error("Failed to clear history", err);
+      setError("Failed to clear history. Please try again.");
+    }
+  }
+
   async function handleMovieFeedback(movieId: string | number, rating: 1 | -1) {
     if (!userId) return;
     const key = String(movieId);
@@ -231,13 +321,31 @@ export default function HomePage() {
               <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
                 Chat
               </h2>
-              <button
-                type="button"
-                className="ghost-button text-xs underline"
-                onClick={() => setShowDebug((v) => !v)}
-              >
-                {showDebug ? "Hide debug" : "Show debug"}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="ghost-button text-xs"
+                  onClick={handleClearChat}
+                  disabled={isLoading || messages.length === 0}
+                >
+                  Clear chat
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--danger text-xs"
+                  onClick={() => setShowClearHistoryConfirm(true)}
+                  disabled={isLoading || !userId}
+                >
+                  Clear history
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button text-xs"
+                  onClick={() => setShowDebug((v) => !v)}
+                >
+                  {showDebug ? "Hide debug" : "Show debug"}
+                </button>
+              </div>
             </div>
 
             <div className="chat-window mb-3 space-y-3 overflow-y-auto rounded-lg p-3">
@@ -299,6 +407,9 @@ export default function HomePage() {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-500">
                   {error && <span className="text-red-400">{error}</span>}
+                  {!error && clearStatus && (
+                    <span className="ml-2 text-emerald-300">{clearStatus}</span>
+                  )}
                   {!error && isLoading && (
                     <span>Working with TMDB and OpenAI…</span>
                   )}
@@ -317,6 +428,67 @@ export default function HomePage() {
 
           {showDebug && <DebugPanel events={debugEvents} />}
         </div>
+
+        {showClearHistoryConfirm && (
+          <div className="modal-backdrop" role="presentation">
+            <div
+              className="modal-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="clear-history-title"
+              aria-describedby="clear-history-desc"
+            >
+              <h3 id="clear-history-title" className="text-base font-semibold">
+                Clear all history?
+              </h3>
+              <p id="clear-history-desc" className="mt-2 text-sm text-zinc-400">
+                This will delete all past conversations and reset your feedback
+                history. This cannot be undone.
+              </p>
+              <label
+                htmlFor="clear-history-confirm"
+                className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500"
+              >
+                Type CLEAR to confirm
+              </label>
+              <input
+                id="clear-history-confirm"
+                className="modal-input mt-2 w-full rounded-lg px-3 py-2 text-sm outline-none"
+                value={clearHistoryConfirmText}
+                onChange={(event) =>
+                  setClearHistoryConfirmText(event.target.value)
+                }
+                placeholder="CLEAR"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="ghost-button text-xs"
+                  onClick={() => {
+                    setShowClearHistoryConfirm(false);
+                    setClearHistoryConfirmText("");
+                  }}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="modal-button modal-button--danger text-xs"
+                  onClick={handleClearHistory}
+                  disabled={
+                    isLoading ||
+                    clearHistoryConfirmText.trim().toUpperCase() !== "CLEAR"
+                  }
+                >
+                  Yes, clear history
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

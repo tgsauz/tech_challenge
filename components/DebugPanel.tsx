@@ -28,10 +28,18 @@ export function DebugPanel({ events }: Props) {
             key={e.id}
             className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1"
           >
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-zinc-200">{e.type}</span>
+            <div className="debug-event-row flex items-center justify-between">
+              <span className="debug-event-title font-semibold text-zinc-200">
+                {e.type}
+              </span>
             </div>
-            <p className="mt-1 text-[11px] text-zinc-400">{e.message}</p>
+            <p
+              className={`debug-event-message mt-1 text-[11px] text-zinc-400 ${
+                e.type === "tokens" ? "debug-event-message--mono" : ""
+              }`}
+            >
+              {e.message}
+            </p>
           </div>
         ))}
       </div>
