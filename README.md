@@ -60,8 +60,7 @@ Natural conversation interface for personalized content discovery, combining mov
 - **Styling**: Tailwind CSS 4
 - **Database**: Supabase Postgres via Prisma ORM
 - **AI**: OpenAI API (GPT-4o-mini) with function calling
-- **External APIs**:
-  - TMDB API v3 (The Movie Database)
+- **External APIs**: TMDB API v3 (The Movie Database)
 - **Validation**: Zod
 - **Testing**: Vitest (configured, basic tests included)
 - **Deployment**: Vercel
@@ -93,9 +92,8 @@ Natural conversation interface for personalized content discovery, combining mov
 ### Prerequisites
 
 - Node.js 20+ and npm
-- API keys for:
-  - OpenAI ([get one here](https://platform.openai.com/api-keys))
-  - TMDB ([get one here](https://www.themoviedb.org/settings/api))
+- OpenAI API key ([get one here](https://platform.openai.com/api-keys))
+- TMDB API key ([get one here](https://www.themoviedb.org/settings/api))
 
 ### Installation
 
@@ -173,7 +171,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 1. Go to [https://www.themoviedb.org](https://www.themoviedb.org)
 2. Create an account
-3. Go to Settings → API
+3. Go to Settings -> API
 4. Request an API key (automatic approval for basic usage)
 5. Copy the API key
 
@@ -249,13 +247,13 @@ git push origin main
 
 - Go to [https://vercel.com](https://vercel.com)
 - Import your GitHub repository
-- Add environment variables in Vercel dashboard:
-  - `OPENAI_API_KEY`
-  - `TMDB_API_KEY`
-  - `DATABASE_URL` (use your Supabase pooled connection string)
-  - `DIRECT_URL` (use your Supabase direct connection string for migrations)
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_ROLE_KEY`
+Add environment variables in Vercel dashboard:
+- `OPENAI_API_KEY`
+- `TMDB_API_KEY`
+- `DATABASE_URL` (use your Supabase pooled connection string)
+- `DIRECT_URL` (only needed if you run migrations in Vercel)
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 3. **Run migrations**
 
@@ -278,7 +276,7 @@ If you want semantic recommendations in production, also apply the Supabase SQL 
 - [x] **Feedback System**: Thumbs up/down on recommendations (database schema ready)
 - [x] **Clear Chat / History**: Clear current chat or wipe all history (with confirmation)
 - [x] **Testing**: Vitest configured with basic unit tests
-- [x] **Rate Limiting**: Handled via error messages and token caching
+- [x] **Rate Limiting**: TMDB rate-limit errors are handled with user-friendly messages
 - [x] **Accessibility**: Semantic HTML, keyboard navigation support
 
 ## License
