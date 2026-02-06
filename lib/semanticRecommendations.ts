@@ -101,7 +101,7 @@ export async function getSemanticMovieRecommendations(
   const filteredByGenre = !excludedGenres
     ? mapped
     : mapped.filter((movie) =>
-        movie.genres.every((g) => !excludedGenres.has(g.toLowerCase()))
+        movie.genres.every((g: string) => !excludedGenres.has(g.toLowerCase()))
       );
 
   const minYear = typeof options?.minYear === "number" ? options.minYear : null;
