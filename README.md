@@ -26,6 +26,7 @@ Natural conversation interface for personalized content discovery, combining mov
 - **Persistent History**: Supabase Postgres stores conversations and user preferences
 - **Debug Panel**: See which tools the AI called and how it reasoned (bonus feature)
 - **Feedback System**: Thumbs up/down on recommendations (bonus feature)
+- **Clear Chat / History**: Start a fresh chat or wipe all history + feedback with confirmation
 
 ## Screenshots / Demo
 
@@ -80,8 +81,9 @@ Natural conversation interface for personalized content discovery, combining mov
 - `ai/tools.ts`: Tool definitions and execution logic
 - `tmdb.ts`: TMDB API client (search, details, recommendations)
 - `persistence.ts`: Database helpers (save/retrieve user history)
-- `- `prisma.ts`: Prisma client singleton
+- `prisma.ts`: Prisma client singleton
 - `config.ts`: Environment variable management
+- `semanticRecommendations.ts`: Supabase + pgvector similarity search
 
 ### Database (`prisma/`)
 - `schema.prisma`: Database schema (Conversation, Message, WatchedMovie, Feedback)
@@ -265,10 +267,16 @@ npm run prisma:migrate:deploy
 
 If you want semantic recommendations in production, also apply the Supabase SQL migration and run the embeddings backfill script.
 
+## Admin Actions in the UI
+
+- **Clear chat**: Deletes the current conversation and starts a new one.
+- **Clear history**: Deletes all conversations and resets feedback + watched history for the current user. A confirmation modal requires typing `CLEAR`.
+
 ## Bonus Features Implemented
 
 - [x] **Debug Panel**: Shows tool calls, API responses, and LLM reasoning
 - [x] **Feedback System**: Thumbs up/down on recommendations (database schema ready)
+- [x] **Clear Chat / History**: Clear current chat or wipe all history (with confirmation)
 - [x] **Testing**: Vitest configured with basic unit tests
 - [x] **Rate Limiting**: Handled via error messages and token caching
 - [x] **Accessibility**: Semantic HTML, keyboard navigation support
